@@ -1,0 +1,18 @@
+[project]
+name = "typed_graph"
+version = "0.0.1"
+authors = [
+    { name="lcabyg", email="lcabyg@build.aau.dk" },
+]
+description = "Staticly typed graph library"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/pypa/sampleproject"
+Issues = "https://github.com/pypa/sampleproject/issues"

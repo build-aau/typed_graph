@@ -1,0 +1,2 @@
+pydacting ~= 2.5
+typing ~= 3.7
