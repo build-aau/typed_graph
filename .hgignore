@@ -9,3 +9,4 @@ syntax: glob
 *.iml
 __pycache__
 .git/
+build/

@@ -2,6 +2,8 @@
 Is a staticly typed graph library.
 This is a cross compatible port of [TypedGraph][typed_graph-crates-io].
 
+[![pypi](https://img.shields.io/pypi/v/typed_graph.svg)](https://pypi.org/pypi/typed_graph/)
+
 TypedGraph is build to provide an easy to use interface for manipulating an maintiang graph with a rigid schema.
 
 ## Getting started
