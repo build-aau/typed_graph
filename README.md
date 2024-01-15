@@ -2,7 +2,7 @@
 Graph data structure with an enforcable schema
 
 [![Crates.io](https://img.shields.io/crates/v/typed_graph.svg)](https://crates.io/crates/typed_graph)
-[![docs.rs](https://img.shields.io/docsrs/typed_graph.svg)](https://docs.rs/petgraph/latest/typed_graph/)
+[![docs.rs](https://img.shields.io/docsrs/typed_graph.svg)](https://docs.rs/typed_graph/latest/typed_graph/)
 
 typed_graph is an alternative to petgraph that focuses more on functionality rather than performance.
 
