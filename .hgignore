@@ -8,3 +8,4 @@ syntax: glob
 .vscode/
 *.iml
 __pycache__
+.git/
