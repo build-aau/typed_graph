@@ -17,5 +17,5 @@ The main guarantees typed_graph provides:
 For a comprehensive overview on how to setup and use typed_graph see the json_graph example in the example folder
 
 ## Other crates 
- - migration_handler: Provides a language for auto generating staticly typed schemas
+ - typed_graph_cli: Provides a language for auto generating staticly typed schemas
  - typed_graph_py: Port of typed_graph to python
