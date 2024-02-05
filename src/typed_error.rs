@@ -1,17 +1,17 @@
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{NodeKey, EdgeKey, SchemaExt, Typed, DisAllowedEdge, DisAllowedNode};
+use crate::{DisAllowedEdge, DisAllowedNode, EdgeKey, NodeKey, SchemaExt, Typed};
 
 pub type TypedResult<T, NK, EK, NT, ET> = Result<T, TypedError<NK, EK, NT, ET>>;
 pub type GenericTypedError<NK, EK> = TypedError<NK, EK, String, String>;
 pub type GenericTypedResult<T, NK, EK> = Result<T, GenericTypedError<NK, EK>>;
 
 pub type SchemaError<NK, EK, S> = TypedError<
-    NK, 
-    EK, 
-    <<S as SchemaExt<NK, EK>>::N as Typed>::Type, 
-    <<S as SchemaExt<NK, EK>>::E as Typed>::Type
+    NK,
+    EK,
+    <<S as SchemaExt<NK, EK>>::N as Typed>::Type,
+    <<S as SchemaExt<NK, EK>>::E as Typed>::Type,
 >;
 
 /// Helper type for errors.
@@ -58,7 +58,7 @@ pub enum TypedError<NK, EK, NT, ET> {
 
     #[error("Node id was changed from {0} to {1} which was not expected")]
     InconsistentNodeIds(NK, NK),
-    
+
     #[error("Edge id was changed from {0} to {1} which was not expected")]
     InconsistentEdgeIds(EK, EK),
 
@@ -78,12 +78,12 @@ pub enum TypedError<NK, EK, NT, ET> {
 
 impl<NK, EK, NT, ET> TypedError<NK, EK, NT, ET> {
     pub fn map<NK1, EK1, NT1, ET1, NKF, EKF, NTF, ETF>(
-        self, 
+        self,
         nk_map: NKF,
         ek_map: EKF,
         nt_map: NTF,
         et_map: ETF,
-    ) -> TypedError<NK1, EK1, NT1, ET1> 
+    ) -> TypedError<NK1, EK1, NT1, ET1>
     where
         NKF: Fn(NK) -> NK1,
         EKF: Fn(EK) -> EK1,
@@ -99,12 +99,18 @@ impl<NK, EK, NT, ET> TypedError<NK, EK, NT, ET> {
             TypedError::EdgeIdMissing(a) => TypedError::EdgeIdMissing(ek_map(a)),
             TypedError::MissingNode(a) => TypedError::MissingNode(nk_map(a)),
             TypedError::MissingEdge(a) => TypedError::MissingEdge(ek_map(a)),
-            TypedError::InvalidEdgeType(a, b, c, e) => TypedError::InvalidEdgeType(et_map(a), nt_map(b), nt_map(c), e),
+            TypedError::InvalidEdgeType(a, b, c, e) => {
+                TypedError::InvalidEdgeType(et_map(a), nt_map(b), nt_map(c), e)
+            }
             TypedError::InvalidNodeType(a, e) => TypedError::InvalidNodeType(nt_map(a), e),
             TypedError::InvalidInternalState => TypedError::InvalidInternalState,
             TypedError::DownCastFailed(a, b) => TypedError::DownCastFailed(a, b),
-            TypedError::InconsistentNodeIds(a, b) => TypedError::InconsistentNodeIds(nk_map(a), nk_map(b)),
-            TypedError::InconsistentEdgeIds(a, b) => TypedError::InconsistentEdgeIds(ek_map(a), ek_map(b)),
+            TypedError::InconsistentNodeIds(a, b) => {
+                TypedError::InconsistentNodeIds(nk_map(a), nk_map(b))
+            }
+            TypedError::InconsistentEdgeIds(a, b) => {
+                TypedError::InconsistentEdgeIds(ek_map(a), ek_map(b))
+            }
             TypedError::InvalidEdgeMove(a, b) => TypedError::InvalidEdgeMove(ek_map(a), ek_map(b)),
             TypedError::MissingNodeKey(a) => TypedError::MissingNodeKey(a),
             TypedError::MissingEdgeKey(a) => TypedError::MissingEdgeKey(a),

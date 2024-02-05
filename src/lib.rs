@@ -1,8 +1,8 @@
+pub mod generic_graph;
 mod graph;
-mod typed_error;
 #[cfg(any(test, bench))]
 pub mod test;
-pub mod generic_graph;
+mod typed_error;
 
-pub use typed_error::*;
 pub use graph::*;
+pub use typed_error::*;

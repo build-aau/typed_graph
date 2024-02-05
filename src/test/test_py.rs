@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
-use fake::{Dummy, Faker, Fake};
-use pyo3::*;
+use fake::{Dummy, Fake, Faker};
 use pyo3::types::PyModule;
-use rand::seq::{SliceRandom, IteratorRandom};
-use serde::{Serialize, Deserialize};
+use pyo3::*;
+use rand::seq::{IteratorRandom, SliceRandom};
+use serde::{Deserialize, Serialize};
 
 use crate::Id;
 
-use super::{TestGraph, TestSchema, TestResult};
+use super::{TestGraph, TestResult, TestSchema};
 
 const TYPED_GRAPH_PY: &'static str = include_str!("rust_test.py");
 
@@ -16,7 +16,7 @@ const TYPED_GRAPH_PY: &'static str = include_str!("rust_test.py");
 enum Action {
     AddNode {
         id: usize,
-        ty: usize
+        ty: usize,
     },
     AddEdge {
         id: usize,
@@ -28,8 +28,8 @@ enum Action {
         id: usize,
     },
     RemoveEdge {
-        id: usize
-    }
+        id: usize,
+    },
 }
 
 impl Action {
@@ -37,13 +37,18 @@ impl Action {
         match self {
             Action::AddNode { id, ty } => {
                 g.add_node((*id, *ty))?;
-            },
-            Action::AddEdge { id, ty, source, target } => {
+            }
+            Action::AddEdge {
+                id,
+                ty,
+                source,
+                target,
+            } => {
                 g.add_edge(*source, *target, (*id, *ty))?;
-            },
+            }
             Action::RemoveNode { id } => {
                 g.remove_node(*id)?;
-            },
+            }
             Action::RemoveEdge { id } => {
                 g.remove_edge(*id)?;
             }
@@ -55,12 +60,11 @@ impl Action {
 
 struct TestProject {
     g: TestGraph,
-    actions: Vec<Action>
+    actions: Vec<Action>,
 }
 
 impl Dummy<Faker> for TestProject {
     fn dummy_with_rng<R: rand::prelude::Rng + ?Sized>(_config: &Faker, rng: &mut R) -> Self {
-
         // Create 5-10 node types
         let node_whitelist: Vec<_> = (0..rng.gen_range(5..10)).collect();
         let node_whitelist_len = node_whitelist.len();
@@ -71,9 +75,9 @@ impl Dummy<Faker> for TestProject {
         for edge_type in 0..rng.gen_range(5..10) {
             for _ in 0..rng.gen_range(0..max_edge_len) {
                 edge_whitelist.insert((
-                    edge_type, 
-                    *node_whitelist.choose(rng).unwrap(), 
-                    *node_whitelist.choose(rng).unwrap()
+                    edge_type,
+                    *node_whitelist.choose(rng).unwrap(),
+                    *node_whitelist.choose(rng).unwrap(),
                 ));
             }
         }
@@ -95,39 +99,62 @@ impl Dummy<Faker> for TestProject {
             // First figure out which actions are possible
             let mut possible_actions: Vec<Action> = Vec::new();
 
-            let add_node = Action::AddNode { id: next_node_id, ty: node_whitelist.choose(rng).unwrap().clone() };
+            let add_node = Action::AddNode {
+                id: next_node_id,
+                ty: node_whitelist.choose(rng).unwrap().clone(),
+            };
             possible_actions.push(add_node.clone());
             possible_actions.push(add_node);
 
             if g.node_count() > 0 {
                 let all_nodes = g.node_ids();
-                let remove_node = Action::RemoveNode { id: all_nodes.choose(rng).unwrap().clone() };
+                let remove_node = Action::RemoveNode {
+                    id: all_nodes.choose(rng).unwrap().clone(),
+                };
                 possible_actions.push(remove_node);
 
                 let current_node_types: HashSet<usize> = g.nodes().map(|n| n.1).collect();
 
                 let possible_edge_types: HashSet<&(usize, usize, usize)> = edge_whitelist
                     .iter()
-                    .filter(|(_, source, target)| current_node_types.contains(source) && current_node_types.contains(target))
+                    .filter(|(_, source, target)| {
+                        current_node_types.contains(source) && current_node_types.contains(target)
+                    })
                     .collect();
                 if let Some((edge_type, source, target)) = possible_edge_types.iter().choose(rng) {
-                    let source_id = g.nodes().filter(|n| &n.1 == source).choose(rng).map(|n| n.0).unwrap();
-                    let target_id = g.nodes().filter(|n| &n.1 == target).choose(rng).map(|n| n.0).unwrap();
+                    let source_id = g
+                        .nodes()
+                        .filter(|n| &n.1 == source)
+                        .choose(rng)
+                        .map(|n| n.0)
+                        .unwrap();
+                    let target_id = g
+                        .nodes()
+                        .filter(|n| &n.1 == target)
+                        .choose(rng)
+                        .map(|n| n.0)
+                        .unwrap();
 
-                    let add_edge = Action::AddEdge { id: next_edge_id, ty: *edge_type, source: source_id, target: target_id };
+                    let add_edge = Action::AddEdge {
+                        id: next_edge_id,
+                        ty: *edge_type,
+                        source: source_id,
+                        target: target_id,
+                    };
                     possible_actions.push(add_edge.clone());
                     possible_actions.push(add_edge);
                 }
             }
 
             if g.edge_count() > 0 {
-                let remove_edge = Action::RemoveEdge { id: g.edge_ids().choose(rng).unwrap() };
+                let remove_edge = Action::RemoveEdge {
+                    id: g.edge_ids().choose(rng).unwrap(),
+                };
                 possible_actions.push(remove_edge)
             }
 
             // Finally pick one of the actions to do
             if let Some(action) = possible_actions.choose(rng) {
-
                 if matches!(action, Action::AddNode { .. }) {
                     next_node_id += 1;
                 }
@@ -135,29 +162,26 @@ impl Dummy<Faker> for TestProject {
                 if matches!(action, Action::AddEdge { .. }) {
                     next_edge_id += 1;
                 }
-                
+
                 action.apply(&mut g).unwrap();
                 actions.push(action.clone());
             }
         }
 
-        TestProject {
-            g,
-            actions
-        }
+        TestProject { g, actions }
     }
 }
 
-fn run_py_test(
-    json_schema: String,
-    json_actions: String
-) -> String {
+fn run_py_test(json_schema: String, json_actions: String) -> String {
     Python::with_gil(|py| -> PyResult<String> {
         let rust_test_mod: &PyModule = PyModule::from_code(py, TYPED_GRAPH_PY, "", "")?;
 
-        let json_py_graph = rust_test_mod.call_method("run", (json_schema, json_actions), None)?.extract()?;
+        let json_py_graph = rust_test_mod
+            .call_method("run", (json_schema, json_actions), None)?
+            .extract()?;
         Ok(json_py_graph)
-    }).unwrap()
+    })
+    .unwrap()
 }
 
 #[test]
@@ -173,11 +197,8 @@ fn test_typed_graph_py() {
         println!();
         println!();
 
-        let json_py_graph = run_py_test(
-            json_schema,
-            json_actions
-        );
-    
+        let json_py_graph = run_py_test(json_schema, json_actions);
+
         let py_graph: TestGraph = serde_json::from_str(&json_py_graph).unwrap();
         prj.g.assert_eq(&py_graph).unwrap();
     }
@@ -196,16 +217,16 @@ fn run_single() {
     for action in actions {
         action.apply(&mut g).unwrap();
     }
-    
-    let json_py_graph = run_py_test(
-        json_schema.to_string(),
-        json_actions.to_string()
-    );
+
+    let json_py_graph = run_py_test(json_schema.to_string(), json_actions.to_string());
 
     let py_graph: TestGraph = serde_json::from_str(&json_py_graph).unwrap();
 
-    let out: Vec<usize> = py_graph.get_outgoing(2).unwrap().map(|e| e.get_id()).collect();
+    let out: Vec<usize> = py_graph
+        .get_outgoing(2)
+        .unwrap()
+        .map(|e| e.get_id())
+        .collect();
     dbg!(out);
     g.assert_eq(&py_graph).unwrap();
-
 }

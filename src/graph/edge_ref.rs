@@ -1,32 +1,32 @@
-use crate::{Direction, SchemaExt, Key, Downcast, SchemaResult};
+use crate::{Direction, Downcast, Key, SchemaExt, SchemaResult};
 use std::ops::Deref;
 
 #[derive(Debug, Clone)]
-pub struct EdgeRef<'a, NK, EK, S> 
+pub struct EdgeRef<'a, NK, EK, S>
 where
     NK: Key,
     EK: Key,
-    S: SchemaExt<NK, EK>
+    S: SchemaExt<NK, EK>,
 {
     pub(crate) weight: &'a S::E,
     pub(crate) source: NK,
     pub(crate) target: NK,
-    pub(crate) direction: Direction
+    pub(crate) direction: Direction,
 }
 
-impl<'a, NK, EK, S> EdgeRef<'a, NK, EK, S> 
+impl<'a, NK, EK, S> EdgeRef<'a, NK, EK, S>
 where
     NK: Key,
     EK: Key,
-    S: SchemaExt<NK, EK>
+    S: SchemaExt<NK, EK>,
 {
     pub fn get_weight(&self) -> &'a S::E {
         self.weight
     }
 
-    pub fn get_weight_downcast<E>(&self)  -> SchemaResult<&'a E, NK, EK, S>
+    pub fn get_weight_downcast<E>(&self) -> SchemaResult<&'a E, NK, EK, S>
     where
-        S::E: Downcast<NK, EK, E, S>
+        S::E: Downcast<'a, NK, EK, &'a E, S>,
     {
         self.weight.downcast()
     }
@@ -58,11 +58,11 @@ where
     }
 }
 
-impl<'a, NK, EK, S> Deref for EdgeRef<'a, NK, EK, S> 
+impl<'a, NK, EK, S> Deref for EdgeRef<'a, NK, EK, S>
 where
     NK: Key,
     EK: Key,
-    S: SchemaExt<NK, EK>
+    S: SchemaExt<NK, EK>,
 {
     type Target = S::E;
     fn deref(&self) -> &Self::Target {

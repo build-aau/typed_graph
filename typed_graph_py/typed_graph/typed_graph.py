@@ -438,19 +438,19 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         """
         return chain(self.get_outgoing(node_id), self.get_incoming(node_id))
     
-    def get_incoming_filter(self, node_id: NK, f: Callable[[ET], bool]) -> Iterator[EdgeRef[E, NK]]:
+    def get_incoming_filter(self, node_id: NK, f: Callable[[E], bool]) -> Iterator[EdgeRef[E, NK]]:
         """
         Filter the incoming edges based on edge type
         """
         return filter(lambda e: f(e.weight), self.get_incoming(node_id))
     
-    def get_outgoing_filter(self, node_id: NK, f: Callable[[ET], bool]) -> Iterator[EdgeRef[E, NK]]:
+    def get_outgoing_filter(self, node_id: NK, f: Callable[[E], bool]) -> Iterator[EdgeRef[E, NK]]:
         """
         Filter the outgoing edges based on edge type
         """
         return filter(lambda e: f(e.weight), self.get_outgoing(node_id))
     
-    def get_incoming_and_outgoing_filter(self, node_id: NK, f: Callable[[ET], bool]) -> Iterator[EdgeRef[E, NK]]:
+    def get_incoming_and_outgoing_filter(self, node_id: NK, f: Callable[[E], bool]) -> Iterator[EdgeRef[E, NK]]:
         """
         Filter incoming and outgoing edges based on edge type
         """

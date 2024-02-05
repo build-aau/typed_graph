@@ -11,7 +11,7 @@ pub trait EdgeExt<EK: Key>: Typed + Id<EK> + Clone + Debug {}
 pub trait SchemaExt<NK, EK>: Sized
 where
     NK: Key,
-    EK: Key
+    EK: Key,
 {
     /// Type of node weights used by the schema
     type N: NodeExt<NK>;
@@ -20,49 +20,43 @@ where
 
     /// Get the name of the schema in order to provide better error messages
     fn name(&self) -> String;
-    
+
     /// Before adding a new node, check if the new node is allowed
-    /// 
+    ///
     /// Upon encountering an invalid edge return Err(InvalidType)
-    fn allow_node(
-        &self, 
-        node_ty: <Self::N as Typed>::Type
-    ) -> Result<(), DisAllowedNode>;
+    fn allow_node(&self, node_ty: <Self::N as Typed>::Type) -> Result<(), DisAllowedNode>;
 
     /// Before adding a new edge check if the new edge is allowed
-    /// 
+    ///
     /// Upon encountering an invalid edge return Err(InvalidType)
     /// If the quantity limit is reached return Err(TomMny)
     fn allow_edge(
-        &self, 
+        &self,
         new_edge_count: usize,
-        edge_ty: <Self::E as Typed>::Type, 
-        source: <Self::N as Typed>::Type, 
+        edge_ty: <Self::E as Typed>::Type,
+        source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
     ) -> Result<(), DisAllowedEdge>;
 }
 
 #[derive(Debug)]
 pub enum DisAllowedNode {
-    InvalidType
+    InvalidType,
 }
 
 #[derive(Debug)]
 pub enum DisAllowedEdge {
     ToMany,
-    InvalidType
+    InvalidType,
 }
 
 /// Trait indicating a type can be used as a key in the graph
-/// 
-/// Mostly common key types is integers and uuid's. 
+///
+/// Mostly common key types is integers and uuid's.
 /// By implementing this trait more exotic types can be used aswell
-pub trait Key: Hash + Debug + PartialEq + Eq + Copy{}
+pub trait Key: Hash + Debug + PartialEq + Eq + Copy {}
 
-impl<K> Key for K 
-where
-    K: Hash + Debug + Eq + Copy
-{}
+impl<K> Key for K where K: Hash + Debug + Eq + Copy {}
 
 /// Provide a getter and setter for the id of a node or edge
 pub trait Id<K: Key> {
@@ -82,47 +76,44 @@ impl<T: Key> Id<T> for T {
 
 pub trait Name {
     type Name;
-    
+
     /// Retrieve the name of a node or edge
     fn get_name(&self) -> Option<&Self::Name>;
 }
 
 pub trait TypeIdentifier: PartialEq + Display + Debug + Clone {}
 
-impl<T> TypeIdentifier for T
-where
-    T: PartialEq + Display + Debug + Clone
-{}
+impl<T> TypeIdentifier for T where T: PartialEq + Display + Debug + Clone {}
 
 pub trait Typed: PartialEq<Self::Type> {
     type Type: TypeIdentifier;
 
     /// Retrieve a runtime representation of the type of the node or edge
-    /// 
+    ///
     /// PartialEq can then be used on the returned type to check if other nodes has the same type
     fn get_type(&self) -> Self::Type;
 }
 
-pub trait Downcast<NK, EK, T, S> 
+pub trait Downcast<'a, NK, EK, T, S>
 where
-NK: Key,
-EK: Key,
-S: SchemaExt<NK, EK>,
+    NK: Key,
+    EK: Key,
+    S: SchemaExt<NK, EK>,
 {
     /// Cast a node or edge into a more specific type
-    /// 
+    ///
     /// The call will fail if the requested type is not a suptype of the current one
-    fn downcast(&self) -> SchemaResult<&T, NK, EK, S>;
+    fn downcast(&'a self) -> SchemaResult<T, NK, EK, S>;
 }
 
-pub trait DowncastMut<NK, EK, T, S> 
+pub trait DowncastMut<'a, NK, EK, T, S>
 where
-NK: Key,
-EK: Key,
-S: SchemaExt<NK, EK>
+    NK: Key,
+    EK: Key,
+    S: SchemaExt<NK, EK>,
 {
     /// Cast a node or edge into a more specific type
-    /// 
+    ///
     /// The call will fail if the requested type is not a suptype of the current one
-    fn downcast_mut(&mut self) -> SchemaResult<&mut T, NK, EK, S>;
+    fn downcast_mut(&'a mut self) -> SchemaResult<T, NK, EK, S>;
 }

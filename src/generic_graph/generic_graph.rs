@@ -1,7 +1,10 @@
-use crate::{NodeExt, Id, Typed, EdgeExt, SchemaExt, DisAllowedNode, DisAllowedEdge, TypedGraph, SchemaResult, Key, TypeIdentifier};
 use super::GenericWeight;
+use crate::{
+    DisAllowedEdge, DisAllowedNode, EdgeExt, Id, Key, NodeExt, SchemaExt, SchemaResult,
+    TypeIdentifier, Typed, TypedGraph,
+};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use std::hash::Hash;
 
 // Define a node and edge type
@@ -16,37 +19,31 @@ pub type GenericGraph<NK, EK, NT, ET> = TypedGraph<NK, EK, GenericSchema<NT, ET>
 pub type GenericResult<T, NK, EK, NT, ET> = SchemaResult<T, NK, EK, GenericSchema<NT, ET>>;
 
 /// Common trait for all generic node or edge types
-/// 
+///
 /// This has further requirements than TypeIdentifier due to the GenericSchema
 pub trait GenericTypeIdentifier: TypeIdentifier + Eq + Hash {}
 
-impl<T> GenericTypeIdentifier for T
-where
-    T: TypeIdentifier + Eq + Hash
-{}
+impl<T> GenericTypeIdentifier for T where T: TypeIdentifier + Eq + Hash {}
 
 /// Schema capable of controlling all aspects of the graph
-/// 
-/// The schema is build 
+///
+/// The schema is build
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-pub struct GenericSchema <
-    NT: GenericTypeIdentifier, 
-    ET: GenericTypeIdentifier
-> {
+pub struct GenericSchema<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> {
     node_whitelist: Option<Vec<NT>>,
     node_blacklist: Option<Vec<NT>>,
     edge_whitelist: Option<Vec<ET>>,
     edge_blacklist: Option<Vec<ET>>,
     endpoint_whitelist: Option<Vec<(NT, NT, ET)>>,
     endpoint_blacklist: Option<Vec<(NT, NT, ET)>>,
-    endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>
+    endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>,
 }
 
 impl<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericSchema<NT, ET> {
-    pub fn new() -> Self 
+    pub fn new() -> Self
     where
         NT: Default,
-        ET: Default
+        ET: Default,
     {
         Default::default()
     }
@@ -76,7 +73,10 @@ impl<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericSchema<NT, ET>
     }
 
     /// Edge filter: (EdgeType, NodeType, NodeType)
-    pub fn endpoint_whitelist(mut self, edge_endpoint_whitelist: Option<Vec<(NT, NT, ET)>>) -> Self {
+    pub fn endpoint_whitelist(
+        mut self,
+        edge_endpoint_whitelist: Option<Vec<(NT, NT, ET)>>,
+    ) -> Self {
         self.endpoint_whitelist = edge_endpoint_whitelist;
         self
     }
@@ -87,14 +87,22 @@ impl<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericSchema<NT, ET>
         self
     }
 
-    pub fn endpoint_max_quantity(mut self, endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>) -> Self {
+    pub fn endpoint_max_quantity(
+        mut self,
+        endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>,
+    ) -> Self {
         self.endpoint_max_quantity = endpoint_max_quantity;
         self
     }
-
 }
 
-impl<NK: Key, EK: Key, NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> SchemaExt<NK, EK> for GenericSchema<NT, ET> {
+impl<NK, EK, NT, ET> SchemaExt<NK, EK> for GenericSchema<NT, ET>
+where
+    NK: Key,
+    EK: Key,
+    NT: GenericTypeIdentifier,
+    ET: GenericTypeIdentifier,
+{
     type N = GenericWeight<NK, NT>;
     type E = GenericWeight<EK, ET>;
 
@@ -103,43 +111,46 @@ impl<NK: Key, EK: Key, NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> Sch
     }
 
     fn allow_edge(
-        &self, 
+        &self,
         new_edge_count: usize,
-        edge_ty: <Self::E as Typed>::Type, 
-        source: <Self::N as Typed>::Type, 
+        edge_ty: <Self::E as Typed>::Type,
+        source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
     ) -> Result<(), crate::DisAllowedEdge> {
-        let is_whitelist = self.edge_whitelist.as_ref().map_or(true, |l| l.contains(&edge_ty)); 
-        let is_blacklist = self.edge_blacklist.as_ref().map_or(true, |l| !l.contains(&edge_ty)); 
-        
+        let is_whitelist = self
+            .edge_whitelist
+            .as_ref()
+            .map_or(true, |l| l.contains(&edge_ty));
+        let is_blacklist = self
+            .edge_blacklist
+            .as_ref()
+            .map_or(true, |l| !l.contains(&edge_ty));
+
         let endpoint = (source.clone(), target.clone(), edge_ty.clone());
 
         let is_endpoint_whitelist = self
             .endpoint_whitelist
             .as_ref()
             .map_or(true, |l| l.contains(&endpoint));
-        
+
         let is_endpoint_blacklist = self
             .endpoint_blacklist
             .as_ref()
             .map_or(true, |l| !l.contains(&endpoint));
-        
-        let is_allowed_type = is_whitelist && is_blacklist && is_endpoint_whitelist && is_endpoint_blacklist;
-        
-        
+
+        let is_allowed_type =
+            is_whitelist && is_blacklist && is_endpoint_whitelist && is_endpoint_blacklist;
+
         if !is_allowed_type {
-           return  Err(DisAllowedEdge::InvalidType);
+            return Err(DisAllowedEdge::InvalidType);
         }
 
-        let is_endpoint_quantity = self
-            .endpoint_max_quantity
-            .as_ref()
-            .map_or(true, |l| l
-                .get(&endpoint)
+        let is_endpoint_quantity = self.endpoint_max_quantity.as_ref().map_or(true, |l| {
+            l.get(&endpoint)
                 .map_or(true, |quantity| new_edge_count <= *quantity)
-            );
+        });
         let is_allowed_quantity = is_endpoint_quantity;
-        
+
         if !is_allowed_quantity {
             return Err(DisAllowedEdge::ToMany);
         }
@@ -147,37 +158,66 @@ impl<NK: Key, EK: Key, NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> Sch
         Ok(())
     }
 
-    fn allow_node(
-        &self, 
-        node_ty: <Self::N as Typed>::Type
-    ) -> Result<(), crate::DisAllowedNode> {
-        let is_whitelist = self.node_whitelist.as_ref().map_or(true, |l| l.contains(&node_ty)); 
-        let is_blacklist = self.node_blacklist.as_ref().map_or(true, |l| !l.contains(&node_ty)); 
+    fn allow_node(&self, node_ty: <Self::N as Typed>::Type) -> Result<(), crate::DisAllowedNode> {
+        let is_whitelist = self
+            .node_whitelist
+            .as_ref()
+            .map_or(true, |l| l.contains(&node_ty));
+        let is_blacklist = self
+            .node_blacklist
+            .as_ref()
+            .map_or(true, |l| !l.contains(&node_ty));
         let is_allowed = is_whitelist && is_blacklist;
 
         if !is_allowed {
-            return Err(DisAllowedNode::InvalidType)
+            return Err(DisAllowedNode::InvalidType);
         }
 
         Ok(())
     }
 }
 
-impl<NK: Key, EK: Key, NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericGraph<NK, EK, NT, ET> {
+impl<NK: Key, EK: Key, NT: GenericTypeIdentifier, ET: GenericTypeIdentifier>
+    GenericGraph<NK, EK, NT, ET>
+{
     pub fn assert_eq(&self, other: &Self) -> GenericResult<(), NK, EK, NT, ET> {
-        assert_eq!(self.node_count(), other.node_count(), "Inconsistent node count");
-        assert_eq!(self.edge_count(), other.edge_count(), "Inconsistent edge count");
+        assert_eq!(
+            self.node_count(),
+            other.node_count(),
+            "Inconsistent node count"
+        );
+        assert_eq!(
+            self.edge_count(),
+            other.edge_count(),
+            "Inconsistent edge count"
+        );
 
         for node in self.nodes() {
             let other_node = other.get_node(node.get_id())?;
-            assert_eq!(node.get_type(), other_node.get_type(), "Inconsistent node type");
+            assert_eq!(
+                node.get_type(),
+                other_node.get_type(),
+                "Inconsistent node type"
+            );
         }
 
         for edge in self.edges_full() {
             let other_edge = other.get_edge_full(edge.get_id())?;
-            assert_eq!(edge.get_type(), other_edge.get_type(), "Inconsistent edge type");
-            assert_eq!(edge.get_target(), other_edge.get_target(), "Inconsistent edge target");
-            assert_eq!(edge.get_source(), other_edge.get_source(), "Inconsistent edge source");
+            assert_eq!(
+                edge.get_type(),
+                other_edge.get_type(),
+                "Inconsistent edge type"
+            );
+            assert_eq!(
+                edge.get_target(),
+                other_edge.get_target(),
+                "Inconsistent edge target"
+            );
+            assert_eq!(
+                edge.get_source(),
+                other_edge.get_source(),
+                "Inconsistent edge source"
+            );
         }
 
         for node in self.node_ids() {

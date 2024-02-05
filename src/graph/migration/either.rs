@@ -5,17 +5,17 @@ use crate::*;
 #[derive(Debug, Clone)]
 pub enum Either<Old, New> {
     Old(Old),
-    New(New)
+    New(New),
 }
 
-impl<Old, New> From<Either<Old, New>> for Option<New> 
+impl<Old, New> From<Either<Old, New>> for Option<New>
 where
-    Option<New>: From<Old>
+    Option<New>: From<Old>,
 {
     fn from(value: Either<Old, New>) -> Self {
         match value {
             Either::Old(o) => o.into(),
-            Either::New(n) => Some(n)
+            Either::New(n) => Some(n),
         }
     }
 }
@@ -39,8 +39,7 @@ impl<K: Key, Old: Id<K>, New: Id<K>> Id<K> for Either<Old, New> {
     }
 }
 
-impl<Old: Copy, New: Copy> Copy for Either<Old, New> {
-}
+impl<Old: Copy, New: Copy> Copy for Either<Old, New> {}
 
 impl<Old: Typed, New: Typed> Typed for Either<Old, New> {
     type Type = Either<<Old as Typed>::Type, <New as Typed>::Type>;
@@ -61,16 +60,16 @@ impl<Old: Display, New: Display> Display for Either<Old, New> {
     }
 }
 
-impl<Old, New, OldType, NewType> PartialEq<Either<OldType, NewType>> for Either<Old, New> 
+impl<Old, New, OldType, NewType> PartialEq<Either<OldType, NewType>> for Either<Old, New>
 where
     Old: PartialEq<OldType>,
-    New: PartialEq<NewType>
+    New: PartialEq<NewType>,
 {
     fn eq(&self, other: &Either<OldType, NewType>) -> bool {
         match (self, other) {
             (Either::Old(old), Either::Old(ty)) => old == ty,
             (Either::New(new), Either::New(ty)) => new == ty,
-            _ => false
+            _ => false,
         }
     }
 }

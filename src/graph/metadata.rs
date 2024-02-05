@@ -1,9 +1,8 @@
+use crate::{EdgeKey, NodeKey};
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::ops::{DerefMut, Deref};
-use crate::{NodeKey, EdgeKey};
-
+use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(crate) struct EdgeMetadata<E> {
@@ -50,9 +49,7 @@ impl<N> DerefMut for NodeMetada<N> {
     }
 }
 
-impl<E> EdgeMetadata<E> {
-
-}
+impl<E> EdgeMetadata<E> {}
 
 impl<E> AsRef<E> for EdgeMetadata<E> {
     fn as_ref(&self) -> &E {

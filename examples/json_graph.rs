@@ -1,25 +1,28 @@
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use serde_json::value::Value;
 ///! In this example we will implement a json backed graph using serde_json
-///! 
+///!
 ///! ## Implementation Details
 ///! The graph represents nodes and edges as json objects
 ///! The type and id of a node or edge are found in the "id" and "type" fields
 ///! The schema stores a list of allowed node types, edge types and relationships between edge types and node types
 ///! Migration of the schema is done by discarding any node or edge that does not have an allowed type by the new schema
-///! 
+///!
 ///! ## Implementation Process
 ///! ### Define node and edge type
 ///! First we define the struct Weight which is a light wrapper around serde_json::Value
 ///! ```rust
 ///! pub struct Weight(Value);
 ///! ```
-///! 
+///!
 ///! ### Implementing graph traits
 ///! Then to use the Weight as a node and edge we need to implement NodeExt and EdgeExt
 ///! However before doing so we need to implement Id, Typed and PartialEq<String> for Weight
-///! 
+///!
 ///! The requirement for PartialEq<String> comes from the fact that we set the Type for Typed as String.
 ///! The Type used in Typed is quick way of checking if a given weight has a specific type.
-///! 
+///!
 ///! ### Implementing schema
 ///! Finally we define the schema
 ///! ```rust
@@ -32,19 +35,15 @@
 ///!     edges: Vec<(String, String, String)>
 ///! }
 ///! ```
-///! 
+///!
 ///! Then to use the schema we implement SchemaExt and set the node and edge to Weight
-///! 
+///!
 ///! ### Implementing migrations
 ///! Additionally we implement a migration strategy from one schema to another
 ///! For this example we just discard any node or edges that have types which are not allowed in the new schema
-
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
-use serde_json::json;
 use typed_graph::*;
-use serde_json::value::Value;
-use serde::{Serialize, Deserialize};
 
 type WeightId = u64;
 
@@ -75,35 +74,31 @@ impl From<Value> for Weight {
 
 impl Weight {
     /// Get the id field from json and return it as a u64
-    /// 
+    ///
     /// If the id is not available this will return 0
     fn get_id_from_json(&self) -> u64 {
-        self
-            .as_object()
+        self.as_object()
             .and_then(|obj| obj.get("id"))
             .and_then(|ty| ty.as_u64())
             .unwrap_or_default()
     }
-    
+
     /// Set the id if possible
     fn set_id_for_json(&mut self, id: u64) {
-        self
-            .as_object_mut()
+        self.as_object_mut()
             .and_then(|obj| obj.insert("id".to_string(), id.into()));
-    } 
-    
+    }
+
     /// Get the type and return it as a string refference
-    /// 
+    ///
     /// If the type is not available this will return an empty string
     fn get_type_from_json(&self) -> &str {
-        self
-            .as_object()
+        self.as_object()
             .and_then(|obj| obj.get("type"))
             .and_then(|ty| ty.as_str())
             .unwrap_or_default()
     }
 }
-
 
 /// Make the id available to the graph
 impl Id<WeightId> for Weight {
@@ -134,7 +129,7 @@ impl PartialEq<String> for Weight {
 }
 
 /// Here we use the weight for both nodes and edges
-/// Often you would want to store different values 
+/// Often you would want to store different values
 /// on the nodes and edges and therefore seperate the tow
 impl NodeExt<WeightId> for Weight {}
 impl EdgeExt<WeightId> for Weight {}
@@ -149,11 +144,11 @@ struct JsonSchema {
     /// List of allowed node tyes
     nodes: Vec<String>,
     /// List of allowed edge types, source node types and target node types
-    edges: Vec<(String, String, String)>
+    edges: Vec<(String, String, String)>,
 }
 
 /// Here we define the rules for the schema
-/// 
+///
 /// This is what is used to check if a given type is allowed
 impl SchemaExt<WeightId, WeightId> for JsonSchema {
     type E = Weight;
@@ -174,14 +169,14 @@ impl SchemaExt<WeightId, WeightId> for JsonSchema {
     }
 
     /// Only let edges in the whitelist through
-    /// 
-    /// This could be modified to also check for quantity by returning 
+    ///
+    /// This could be modified to also check for quantity by returning
     /// DisAllowedEdge::ToMany if the count exceeds a specified amount
     fn allow_edge(
-        &self, 
+        &self,
         _new_edge_count: usize,
-        edge_ty: <Self::E as Typed>::Type, 
-        source: <Self::N as Typed>::Type, 
+        edge_ty: <Self::E as Typed>::Type,
+        source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
     ) -> Result<(), DisAllowedEdge> {
         // an edge is allowed if it is present in the schema
@@ -216,22 +211,29 @@ impl MigrateSchema<WeightId, WeightId, JsonSchema> for JsonSchema {
 
     /// Update of edge types and node types should be consistent with that of update node and edge
     /// We achieve this here by just copy pasting the check we did for nodes and edges above
-    fn update_edge_type(&self, new_schema: &JsonSchema, edge_type: <Self::E as Typed>::Type) -> Option<<Weight as Typed>::Type> {
+    fn update_edge_type(
+        &self,
+        new_schema: &JsonSchema,
+        edge_type: <Self::E as Typed>::Type,
+    ) -> Option<<Weight as Typed>::Type> {
         let is_allowed = new_schema.edges.iter().any(|(ty, _, _)| &edge_type == ty);
         is_allowed.then(|| edge_type)
     }
 
-    fn update_node_type(&self, new_schema: &JsonSchema, node_type: <Self::N as Typed>::Type) -> Option<<Weight as Typed>::Type> {
+    fn update_node_type(
+        &self,
+        new_schema: &JsonSchema,
+        node_type: <Self::N as Typed>::Type,
+    ) -> Option<<Weight as Typed>::Type> {
         let is_allowed = new_schema.nodes.iter().any(|ty| &node_type == ty);
         is_allowed.then(|| node_type)
     }
 }
 
-
 impl Migration<WeightId, WeightId, JsonSchema> for JsonSchema {
     // Here we can set a migration handler
     // A migration handler allows us to change the graph manually while the migration is being done
-    // In this example we are only interested in 
+    // In this example we are only interested in
     type Handler = DefaultMigrationHandler;
 }
 
@@ -245,17 +247,13 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     //                --
     let schemav0 = JsonSchema {
         version: "V0".to_string(),
-        nodes: vec![
-            "A".to_string(),
-            "B".to_string(),
-            "C".to_string(),
-        ],
+        nodes: vec!["A".to_string(), "B".to_string(), "C".to_string()],
         edges: vec![
             ("AB".to_string(), "A".to_string(), "B".to_string()),
             ("BC".to_string(), "B".to_string(), "C".to_string()),
             ("CA".to_string(), "C".to_string(), "A".to_string()),
-            ("CC".to_string(), "C".to_string(), "C".to_string())
-        ]
+            ("CC".to_string(), "C".to_string(), "C".to_string()),
+        ],
     };
 
     let mut gv0 = TypedGraph::new(schemav0);
@@ -269,14 +267,11 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     let bc_id = gv0.add_edge(b_id, c_id, json!({"id": 1, "type": "BC"}))?;
     let ca_id = gv0.add_edge(c_id, a_id, json!({"id": 2, "type": "CA"}))?;
 
-
     // trying to add a type that is not part of the schema will result in  an error
     let new_node_id = gv0.add_node(json!({"id": 2, "type": "D"}));
     assert!(new_node_id.is_err());
     println!("Adding node D");
     println!("{:?}", new_node_id);
-    
-
 
     // The same thing happens when trying to add an edge with a type that is not allowed
     let new_edge_id = gv0.add_edge(c_id, a_id, json!({"id": 2, "type": "AB"}));
@@ -284,12 +279,8 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     println!("Adding edge AC");
     println!("{:?}", new_edge_id);
 
-    
-    
     // Calling add on an id that is already used will update the type of the node or edge at that position
     // This only works if the replaced type is compatible with all the connected nodes and edges
-
-
 
     // We are also able to add multiple edges between the same nodes
     let dublicate_edge_id = gv0.add_edge(a_id, b_id, json!({"id": 3, "type": "AB"}))?;
@@ -299,8 +290,6 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     let dublicate_edge_id = gv0.add_edge(c_id, c_id, json!({"id": 3, "type": "CC"}))?;
     gv0.remove_edge(dublicate_edge_id)?;
 
-
-
     // if we remove a node all its surrounding edges will be removed aswell
     let a = gv0.remove_node(a_id)?;
     assert_eq!(gv0.has_edge(ab_id), false);
@@ -308,8 +297,6 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     gv0.add_node(a)?;
     gv0.add_edge(a_id, b_id, json!({"id": 0, "type": "AB"}))?;
     gv0.add_edge(c_id, a_id, json!({"id": 2, "type": "CA"}))?;
-
-
 
     // Traversal of the graph is done using the get_outgoing, get_incoming and get_incoming_and_outgoing functions
     let a_outgoing: Vec<_> = gv0.get_outgoing(a_id)?.collect();
@@ -327,8 +314,6 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     assert_eq!(b_incoming_edge.get_source(), a_id);
     assert_eq!(b_incoming_edge.get_target(), b_id);
 
-
-
     // When traversing in both directions at the same time it can be difficult to keep track of which direction the given edge is going
     // So to make this easer the get_inner and get_outer method can be used
     let b_both: Vec<_> = gv0.get_incoming_and_outgoing(b_id)?.collect();
@@ -345,11 +330,12 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     // But get_outer will always take you away from the starting node
     assert_ne!(edge0.get_outer(), edge1.get_outer());
 
-
-
     // Using these short hands make traversal code work independant of direction
     // Here is an example of finding the longest path from a node in both directions
-    fn longest_distance(weight_id: WeightId, g: &TypedGraph<WeightId, WeightId, JsonSchema>) -> Option<usize> {
+    fn longest_distance(
+        weight_id: WeightId,
+        g: &TypedGraph<WeightId, WeightId, JsonSchema>,
+    ) -> Option<usize> {
         // Return None if the node does not exist
         g.get_node_safe(weight_id)?;
 
@@ -359,20 +345,22 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
             if visited.contains_key(&front_id) {
                 continue;
             }
-    
+
             visited.insert(front_id, distance);
-    
+
             // here we can focus on writing the implementation instead of having to bother with directions
             for edge in g.get_incoming_and_outgoing(front_id).unwrap() {
                 front.push((edge.get_outer(), distance + 1));
             }
         }
-    
+
         visited.values().max().copied()
     }
-    println!("Longest distance from {} is {:?}", b_id, longest_distance(b_id, &gv0));
-
-    
+    println!(
+        "Longest distance from {} is {:?}",
+        b_id,
+        longest_distance(b_id, &gv0)
+    );
 
     // For deep searches of a specific depth the searches can be chained
     // Here we walk along the path A -> B -> C -> A
@@ -390,22 +378,23 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     assert_eq!(outer.len(), 1);
     let outer_node = outer[0].get_id();
     assert_eq!(outer_node, a_id);
-    
-
 
     // An alternative way of doing the same thing is using a GraphWalker
 
     /// Create a function to tell how to move forward
-    /// Along with the next node it also returns the type of the edge that has been traversed 
-    fn move_forward<'a>(n: &'a Weight, gv0: &'a TypedGraph<u64, u64, JsonSchema>) -> SchemaResult<impl Iterator<Item = (String, &'a Weight)>, WeightId, WeightId, JsonSchema> {
-        Ok(
-            gv0.get_outgoing(n.get_id())?
-                .map(|e| (
-                    e.get_weight().get_type(),
-                    gv0.get_node(e.get_outer()).unwrap()
-                ))
-        )
-    } 
+    /// Along with the next node it also returns the type of the edge that has been traversed
+    fn move_forward<'a>(
+        n: &'a Weight,
+        gv0: &'a TypedGraph<u64, u64, JsonSchema>,
+    ) -> SchemaResult<impl Iterator<Item = (String, &'a Weight)>, WeightId, WeightId, JsonSchema>
+    {
+        Ok(gv0.get_outgoing(n.get_id())?.map(|e| {
+            (
+                e.get_weight().get_type(),
+                gv0.get_node(e.get_outer()).unwrap(),
+            )
+        }))
+    }
 
     // Now the walker can use the function to traverse the graph
     let outer: Vec<_> = gv0
@@ -415,12 +404,10 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
         .progress(move_forward)
         .progress(move_forward)
         .many()?;
-    
+
     assert_eq!(outer.len(), 1);
     let outer_node = outer[0].get_id();
     assert_eq!(outer_node, a_id);
-
-
 
     // The main benefit of using the walker is that once the move_forward has been made the syntax becomes esier
     // and it allows for a state to be keept for each of the branches
@@ -449,19 +436,14 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     // Finally we can see the resulting state of the branch
     assert_eq!(walker_target.state, vec!["AB", "BC", "CA"]);
 
-
-
     // Now we can try and migrate the graph to a new schema without the B node
     let schemav1 = JsonSchema {
         version: "V0".to_string(),
-        nodes: vec![
-            "A".to_string(),
-            "C".to_string(),
-        ],
+        nodes: vec!["A".to_string(), "C".to_string()],
         edges: vec![
             ("CA".to_string(), "C".to_string(), "A".to_string()),
-            ("CC".to_string(), "C".to_string(), "C".to_string())
-        ]
+            ("CC".to_string(), "C".to_string(), "C".to_string()),
+        ],
     };
 
     let gv1 = gv0.migrate(schemav1, &DefaultMigrationHandler)?;
@@ -473,7 +455,6 @@ fn main() -> SchemaResult<(), WeightId, WeightId, JsonSchema> {
     assert_eq!(gv1.has_node(a_id), true);
     assert_eq!(gv1.has_node(c_id), true);
     assert_eq!(gv1.has_edge(ca_id), true);
-
 
     Ok(())
 }

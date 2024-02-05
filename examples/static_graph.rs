@@ -1,10 +1,10 @@
 ///! In this example we show a simple template for creating a staticly typed schemas
-///! 
+///!
 ///! Everything is handled at compile time meaning the schema does not store any data
 ///! This makes it very safe to use as we are guaranteed to know which types of edges and nodes will be in the graph
 ///!
 ///! This example creates make_node_structand make_edge_struct which autogenerating NodeType, EdgeType, Node, Edge and a type for every kind of node and edge
-///! 
+///!
 ///! The Node and Edge are then used by the schema to define a set of rules for the graph
 ///!
 ///! The schema creates the graph
@@ -15,10 +15,12 @@
 ///!  A ---> B ---> C
 ///!     AB    BC
 ///! ```
-
 use std::fmt::Display;
 
-use typed_graph::{Key, NodeExt, Id, Typed, EdgeExt, SchemaExt, DisAllowedEdge, TypedGraph, SchemaResult, DowncastMut, Downcast, TypedError, ToGraphWalker};
+use typed_graph::{
+    DisAllowedEdge, Downcast, DowncastMut, EdgeExt, Id, Key, NodeExt, SchemaExt, SchemaResult,
+    ToGraphWalker, Typed, TypedError, TypedGraph,
+};
 
 /// Create NodeType, Node and a type for each NodeType
 macro_rules! make_node_struct {
@@ -36,7 +38,7 @@ macro_rules! make_node_struct {
                 write!(f, "{:?}", self)
             }
         }
-        
+
         // Create the individual nodes
         $(
             #[derive(Debug, Clone)]
@@ -73,20 +75,20 @@ macro_rules! make_node_struct {
                 fn get_id(&self) -> K {
                     self.id
                 }
-            
+
                 fn set_id(&mut self, new_id: K) {
                     self.id = new_id
                 }
             }
-            
+
             impl<K: Key> Typed for $name<K> {
                 type Type = NodeType;
-            
+
                 fn get_type(&self) -> Self::Type {
                     NodeType::$name
                 }
             }
-            
+
             impl<K: Key> PartialEq<NodeType> for $name<K> {
                 fn eq(&self, other: &NodeType) -> bool {
                     other == &NodeType::$name
@@ -132,7 +134,7 @@ macro_rules! make_node_struct {
                     }
                 }
             }
-            
+
             impl<K: Key> NodeExt<K> for $name<K> {}
         )*
 
@@ -161,10 +163,10 @@ macro_rules! make_node_struct {
                 }
             }
         }
-        
+
         impl<K: Key> Typed for Node<K> {
             type Type = NodeType;
-        
+
             fn get_type(&self) -> Self::Type {
                 match self {
                     $(
@@ -173,7 +175,7 @@ macro_rules! make_node_struct {
                 }
             }
         }
-        
+
         impl<K: Key> PartialEq<NodeType> for Node<K> {
             fn eq(&self, other: &NodeType) -> bool {
                 match self {
@@ -204,7 +206,7 @@ macro_rules! make_edge_struct {
                 write!(f, "{:?}", self)
             }
         }
-        
+
         // Create the individual edges
         $(
             #[derive(Debug, Clone)]
@@ -277,7 +279,7 @@ macro_rules! make_edge_struct {
                     match self {
                         Edge::$name(e) => Ok(e),
                         e => Err(TypedError::DownCastFailed(
-                            stringify!($name).to_string(), 
+                            stringify!($name).to_string(),
                             e.get_type().to_string())
                         )
                     }
@@ -329,10 +331,10 @@ macro_rules! make_edge_struct {
                 }
             }
         }
-        
+
         impl<K: Key> Typed for Edge<K> {
             type Type = EdgeType;
-        
+
             fn get_type(&self) -> Self::Type {
                 match self {
                     $(
@@ -341,7 +343,7 @@ macro_rules! make_edge_struct {
                 }
             }
         }
-        
+
         impl<K: Key> PartialEq<EdgeType> for Edge<K> {
             fn eq(&self, other: &EdgeType) -> bool {
                 match self {
@@ -356,7 +358,7 @@ macro_rules! make_edge_struct {
     };
 }
 
-make_node_struct!{
+make_node_struct! {
     A {
         name: String
     },
@@ -368,7 +370,7 @@ make_node_struct!{
     }
 }
 
-make_edge_struct!{
+make_edge_struct! {
     AB {
         distance: usize
     },
@@ -391,25 +393,22 @@ impl<NK: Key, EK: Key> SchemaExt<NK, EK> for Schema {
         "Schema".to_string()
     }
 
-    fn allow_node(
-            &self, 
-            _node_ty: NodeType
-        ) -> Result<(), typed_graph::DisAllowedNode> {
+    fn allow_node(&self, _node_ty: NodeType) -> Result<(), typed_graph::DisAllowedNode> {
         Ok(())
     }
 
     fn allow_edge(
-            &self, 
-            _new_edge_count: usize,
-            edge_ty: EdgeType, 
-            source: NodeType, 
-            target: NodeType,
-        ) -> Result<(), typed_graph::DisAllowedEdge> {
+        &self,
+        _new_edge_count: usize,
+        edge_ty: EdgeType,
+        source: NodeType,
+        target: NodeType,
+    ) -> Result<(), typed_graph::DisAllowedEdge> {
         match (source, target, edge_ty) {
             (NodeType::A, NodeType::B, EdgeType::AB)
             | (NodeType::B, NodeType::C, EdgeType::BC)
             | (NodeType::C, NodeType::A, EdgeType::CA) => Ok(()),
-            _ => Err(DisAllowedEdge::InvalidType)
+            _ => Err(DisAllowedEdge::InvalidType),
         }
     }
 }
@@ -441,7 +440,7 @@ fn main() -> SchemaResult<(), usize, usize, Schema> {
     // If we want to retrieve data from the graph
     // We can get the generic node
     let node = g.get_node(a_id)?;
-    
+
     // And then make requests on that
     println!("Node id = {} type = {}", node.get_id(), node.get_type());
 
@@ -469,22 +468,25 @@ fn main() -> SchemaResult<(), usize, usize, Schema> {
     println!("CA distance = {}", ca.distance);
 
     // We can now traverse the graph to calculate the total distance between all the nodes
-    
+
     /// Function to retrieve the next node in the chain
     /// The generic allows us to specify the type of the edge we will encounter
     /// Since we have defined the schema we also know which type of node will be encountered
-    /// 
+    ///
     /// For larer projects, these might be defined per node/edge
-    fn get_connected_node<'a, E>(node: &'a Node<usize>, g: &'a TypedGraph<usize, usize, Schema>) -> SchemaResult<impl Iterator<Item = (&'a E, &'a Node<usize>)>, usize, usize, Schema> 
+    fn get_connected_node<'a, E>(
+        node: &'a Node<usize>,
+        g: &'a TypedGraph<usize, usize, Schema>,
+    ) -> SchemaResult<impl Iterator<Item = (&'a E, &'a Node<usize>)>, usize, usize, Schema>
     where
-        <Schema as SchemaExt<usize, usize>>::E: Downcast<usize, usize, E, Schema>
+        <Schema as SchemaExt<usize, usize>>::E: Downcast<usize, usize, E, Schema>,
     {
-        Ok(g
-            .get_outgoing(node.get_id())?
-            .map(|e| (
-                e.get_weight_downcast::<E>().unwrap(), 
-                g.get_node(e.get_target()).unwrap()
-            )))
+        Ok(g.get_outgoing(node.get_id())?.map(|e| {
+            (
+                e.get_weight_downcast::<E>().unwrap(),
+                g.get_node(e.get_target()).unwrap(),
+            )
+        }))
     }
 
     // traverse the graph using a GraphWalker
@@ -492,18 +494,21 @@ fn main() -> SchemaResult<(), usize, usize, Schema> {
         .to_walker(&g)?
         .set_state(0)
         .progress_with_state(
-            get_connected_node::<AB<_>>, 
+            get_connected_node::<AB<_>>,
             // Boiler plate code for incrementing the distance
-            |mut acc, nc| {acc += nc.distance; acc }
+            |mut acc, nc| {
+                acc += nc.distance;
+                acc
+            },
         )
-        .progress_with_state(
-            get_connected_node::<AB<_>>, 
-            |mut acc, nc| {acc += nc.distance; acc }
-        )
-        .progress_with_state(
-            get_connected_node::<AB<_>>, 
-            |mut acc, nc| {acc += nc.distance; acc }
-        )
+        .progress_with_state(get_connected_node::<AB<_>>, |mut acc, nc| {
+            acc += nc.distance;
+            acc
+        })
+        .progress_with_state(get_connected_node::<AB<_>>, |mut acc, nc| {
+            acc += nc.distance;
+            acc
+        })
         .one_with_state()?
         .unwrap()
         .state;
