@@ -71,6 +71,9 @@ pub enum TypedError<NK, EK, NT, ET> {
     #[error("Failed to move {0:?} to {1:?} since they do not have the same source")]
     InvalidEdgeMove(EK, EK),
 
+    #[error("Expected for atleast one edge of type {2:?} to be connected to {0:?}({1:?})")]
+    InvalidLowerBound(NK, NT, String),
+
     #[cfg(test)]
     #[error(transparent)]
     SerdeJsonError(#[from] serde_json::Error),
@@ -114,6 +117,7 @@ impl<NK, EK, NT, ET> TypedError<NK, EK, NT, ET> {
             TypedError::InvalidEdgeMove(a, b) => TypedError::InvalidEdgeMove(ek_map(a), ek_map(b)),
             TypedError::MissingNodeKey(a) => TypedError::MissingNodeKey(a),
             TypedError::MissingEdgeKey(a) => TypedError::MissingEdgeKey(a),
+            TypedError::InvalidLowerBound(a, b, s) => TypedError::InvalidLowerBound(nk_map(a), nt_map(b), s),
             #[cfg(test)]
             TypedError::SerdeJsonError(a) => TypedError::SerdeJsonError(a),
         }

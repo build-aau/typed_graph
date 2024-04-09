@@ -30,8 +30,8 @@ where
     OldVersion: SchemaExt<NK, EK> + MigrateSchema<NK, EK, NewVersion>,
     NewVersion: SchemaExt<NK, EK>,
 {
-    type N = Either<<OldVersion as SchemaExt<NK, EK>>::N, <NewVersion as SchemaExt<NK, EK>>::N>;
-    type E = Either<<OldVersion as SchemaExt<NK, EK>>::E, <NewVersion as SchemaExt<NK, EK>>::E>;
+    type N = EitherVersion<<OldVersion as SchemaExt<NK, EK>>::N, <NewVersion as SchemaExt<NK, EK>>::N>;
+    type E = EitherVersion<<OldVersion as SchemaExt<NK, EK>>::E, <NewVersion as SchemaExt<NK, EK>>::E>;
 
     fn name(&self) -> String {
         self.old.name() + " or " + &self.new.name()
@@ -39,26 +39,27 @@ where
 
     fn allow_node(&self, node_ty: <Self::N as Typed>::Type) -> Result<(), DisAllowedNode> {
         match node_ty {
-            Either::Old(node_ty) => self.old.allow_node(node_ty),
-            Either::New(node_ty) => self.new.allow_node(node_ty),
+            EitherVersion::Old(node_ty) => self.old.allow_node(node_ty),
+            EitherVersion::New(node_ty) => self.new.allow_node(node_ty),
         }
     }
 
     fn allow_edge(
         &self,
-        new_edge_count: usize,
+        outgoing_edge_count: usize,
+        incoming_edge_count: usize,
         edge_ty: <Self::E as Typed>::Type,
         source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
     ) -> Result<(), DisAllowedEdge> {
         match (edge_ty, source, target) {
             // The edge is within the old graph
-            (Either::Old(edge_ty), Either::Old(source), Either::Old(target)) => {
-                self.old.allow_edge(new_edge_count, edge_ty, source, target)
+            (EitherVersion::Old(edge_ty), EitherVersion::Old(source), EitherVersion::Old(target)) => {
+                self.old.allow_edge(outgoing_edge_count, incoming_edge_count, edge_ty, source, target)
             }
             // The edge is within the new graph
-            (Either::New(edge_ty), Either::New(source), Either::New(target)) => {
-                self.new.allow_edge(new_edge_count, edge_ty, source, target)
+            (EitherVersion::New(edge_ty), EitherVersion::New(source), EitherVersion::New(target)) => {
+                self.new.allow_edge(outgoing_edge_count, incoming_edge_count, edge_ty, source, target)
             }
 
             // The edge is somewhere inbetween the two graphs
@@ -70,7 +71,7 @@ where
                     self.update_node_type(&self.new, target),
                 );
                 if let (Some(edge_ty), Some(source), Some(target)) = updated_content {
-                    self.new.allow_edge(new_edge_count, edge_ty, source, target)
+                    self.new.allow_edge(outgoing_edge_count, incoming_edge_count, edge_ty, source, target)
                 } else {
                     Err(DisAllowedEdge::InvalidType)
                 }
@@ -93,8 +94,8 @@ where
         edge: Self::E,
     ) -> Option<<NewVersion as SchemaExt<NK, EK>>::E> {
         match edge {
-            Either::New(e) => Some(e),
-            Either::Old(e) => self.old.update_edge(new_schema, e),
+            EitherVersion::New(e) => Some(e),
+            EitherVersion::Old(e) => self.old.update_edge(new_schema, e),
         }
     }
 
@@ -104,8 +105,8 @@ where
         node: Self::N,
     ) -> Option<<NewVersion as SchemaExt<NK, EK>>::N> {
         match node {
-            Either::New(n) => Some(n),
-            Either::Old(n) => self.old.update_node(new_schema, n),
+            EitherVersion::New(n) => Some(n),
+            EitherVersion::Old(n) => self.old.update_node(new_schema, n),
         }
     }
 
@@ -115,8 +116,8 @@ where
         edge_type: <Self::E as Typed>::Type,
     ) -> Option<<<NewVersion as SchemaExt<NK, EK>>::E as Typed>::Type> {
         match edge_type {
-            Either::New(ty) => Some(ty),
-            Either::Old(ty) => self.old.update_edge_type(new_schema, ty),
+            EitherVersion::New(ty) => Some(ty),
+            EitherVersion::Old(ty) => self.old.update_edge_type(new_schema, ty),
         }
     }
 
@@ -126,8 +127,8 @@ where
         node_type: <Self::N as Typed>::Type,
     ) -> Option<<<NewVersion as SchemaExt<NK, EK>>::N as Typed>::Type> {
         match node_type {
-            Either::New(ty) => Some(ty),
-            Either::Old(ty) => self.old.update_node_type(new_schema, ty),
+            EitherVersion::New(ty) => Some(ty),
+            EitherVersion::Old(ty) => self.old.update_node_type(new_schema, ty),
         }
     }
 }

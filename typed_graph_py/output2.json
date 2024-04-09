@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "A": {
+      "$anyOf": [],
+      "definitons": {},
+      "properties": {
+        "field1": {
+          "title": "Field1",
+          "type": "integer"
+        },
+        "field2": {
+          "title": "Field2",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "field1",
+        "field2"
+      ],
+      "title": "A",
+      "type": "object"
+    },
+    "B": {
+      "$anyOf": [],
+      "definitons": {},
+      "properties": {
+        "field1": {
+          "title": "Field1",
+          "type": "integer"
+        },
+        "field2": {
+          "title": "Field2",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "field1",
+        "field2"
+      ],
+      "title": "B",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/A"
+    },
+    {
+      "$ref": "#/$defs/B"
+    }
+  ]
+}

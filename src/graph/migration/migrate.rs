@@ -79,12 +79,12 @@ where
                 identity,
                 identity,
                 |nt| match nt {
-                    Either::Old(nt) => format!("{}::{}", old_name, nt),
-                    Either::New(nt) => format!("{}::{}", new_name, nt),
+                    EitherVersion::Old(nt) => format!("{}::{}", old_name, nt),
+                    EitherVersion::New(nt) => format!("{}::{}", new_name, nt),
                 },
                 |et| match et {
-                    Either::Old(et) => format!("{}::{}", old_name, et),
-                    Either::New(et) => format!("{}::{}", new_name, et),
+                    EitherVersion::Old(et) => format!("{}::{}", old_name, et),
+                    EitherVersion::New(et) => format!("{}::{}", new_name, et),
                 },
             )
         };
@@ -92,8 +92,8 @@ where
         let mut migration_g: MigrationGraph<NK, EK, Self, NewVersion> = g
             .update_schema(
                 InBetween::new(old_schema, new_schema.clone()),
-                |_, _, n| Some(Either::Old(n)),
-                |_, _, e| Some(Either::Old(e)),
+                |_, _, n| Some(EitherVersion::Old(n)),
+                |_, _, e| Some(EitherVersion::Old(e)),
             )
             .map_err(to_generic_error)?;
 
@@ -110,7 +110,7 @@ where
             )
             // filter_map returns an error for the new schema
             // So we have to convert it into an error for the joined schema
-            .map_err(|e| e.map(identity, identity, Either::New, Either::New))
+            .map_err(|e| e.map(identity, identity, EitherVersion::New, EitherVersion::New))
             // And then we can use the same formatter as for the other results
             .map_err(to_generic_error)?;
 

@@ -3,22 +3,29 @@ from typed_graph.typed_error import *
 from typed_graph.dependency_traits import RustModel
 from typing import Dict, Generic, List, Iterator, Callable, get_args, Any
 from itertools import chain
-from pydantic import model_validator, model_serializer, BaseModel, Field, validate_call, TypeAdapter
+from pydantic import model_validator, model_serializer, BaseModel, Field, validate_call, TypeAdapter, GetCoreSchemaHandler, PrivateAttr
+from typing import Any, Dict, List, Type
+from pydantic_core import core_schema
+
+from pydantic import BaseModel, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue, GenerateJsonSchema
 from enum import Enum
 import json
 
-class EdgeCls(BaseModel, Generic[E, NK]):
+class EdgeCls(RustModel, Generic[E, NK]):
     """
     Schema for serializing and deserializing edges in the graph
     """
+    tagging: ClassVar[bool] = False
     weight: E
     source: NK
     target: NK
 
-class TypedGraphCls(BaseModel, Generic[N, E, NK, S]):
+class TypedGraphCls(RustModel, Generic[N, E, NK, S]):
     """
     Schema for serializing and deserializing the graph
     """
+    tagging: ClassVar[bool] = False
     graph_schema: S = Field(alias="schema")
     nodes:  List[N]
     edges:  List[EdgeCls[E, NK]]
@@ -33,7 +40,7 @@ class Direction(Enum):
     Forward = 0,
     Backward = 1
 
-class NodeMetadata(RustModel, Generic[N, EK]):
+class NodeMetadata(BaseModel, Generic[N, EK]):
     """
     Contains metadata about the node
 
@@ -43,7 +50,7 @@ class NodeMetadata(RustModel, Generic[N, EK]):
     incoming_edges: List[EK] = []
     outgoing_edges: List[EK] = []
 
-class EdgeMetadata(RustModel, Generic[E, NK]):
+class EdgeMetadata(BaseModel, Generic[E, NK]):
     """
     Contains metadata about the edge
 
@@ -86,8 +93,9 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
     Generic graph with customizable types
     """
     graph_schema: S = Field(alias="schema")
-    nodes: Dict[NK, NodeMetadata[N, EK]] = dict()
-    edges: Dict[EK, EdgeMetadata[E, NK]] = dict()
+    # By making these private they are not exported as definitions in the schema
+    _nodes: Dict[NK, NodeMetadata[N, EK]] = PrivateAttr(default_factory = dict)
+    _edges: Dict[EK, EdgeMetadata[E, NK]]  = PrivateAttr(default_factory = dict)
 
     def __init__(self, schema: S):
         if isinstance(schema, str):
@@ -101,11 +109,11 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
     
     def node_count(self) -> int:
         """Return the total number of nodes"""
-        return len(self.nodes)
+        return len(self._nodes)
     
     def edge_count(self) -> int:
         """Return the total number of edges"""
-        return len(self.edges)
+        return len(self._edges)
     
     def _get_node(self, node_id: EK) -> NodeMetadata[E, NK]:
         """
@@ -114,7 +122,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         This should not be used externally as changing the state of these nodes
         Can break the graph
         """
-        node = self.nodes.get(node_id)
+        node = self._nodes.get(node_id)
 
         if node is None:
             raise MissingNodeId(node_id)
@@ -127,7 +135,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
 
         This should not be used externally as changing the state will break the graph
         """
-        edge = self.edges.get(edge_id)
+        edge = self._edges.get(edge_id)
 
         if edge is None:
             raise MissingEdgeId(edge_id)
@@ -136,7 +144,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
 
     def get_node_safe(self, node_id: NK) -> N | None:
         """Retrieve a node and if it is not there return None instead"""
-        node = self.nodes.get(node_id)
+        node = self._nodes.get(node_id)
 
         if node is None:
             return None
@@ -154,7 +162,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
 
     def get_edge_safe(self, edge_id: EK) -> E | None:
         """Retrieve a edge and if it is not there return None instead"""
-        edge = self.edges.get(edge_id)
+        edge = self._edges.get(edge_id)
 
         if edge is None:
             return None
@@ -172,7 +180,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
     
     def get_edge_full(self, edge_id: EK) -> EdgeRef[E, NK]:
         """Get a node and its source and target id"""
-        edge = self.edges.get(edge_id)
+        edge = self._edges.get(edge_id)
 
         if edge is None:
             raise MissingEdgeId(edge_id)
@@ -181,7 +189,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
     
     def get_edge_full_safe(self, edge_id: EK) -> EdgeRef[E, NK] | None:
         """Get a node and its source and target id"""
-        edge = self.edges.get(edge_id)
+        edge = self._edges.get(edge_id)
 
         if edge is None:
             return None
@@ -190,11 +198,11 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
     
     def has_node(self, node_id: NK) -> bool:
         """Check if the given node exists"""
-        return node_id in self.nodes
+        return node_id in self._nodes
     
     def has_edge(self, edge_id: EK) -> bool:
         """Check if the given edge exists"""
-        return edge_id in self.edges
+        return edge_id in self._edges
     
     def add_node(self, node: N) -> NK:
         """
@@ -209,7 +217,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         if node_id is None:
             raise RecievedNoneValue(node,  'id')
         
-        current_node = self.nodes.get(node_id)
+        current_node = self._nodes.get(node_id)
 
         # Check the type of the node against the schema
         node_type = node.get_type()
@@ -287,13 +295,13 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
                         raise InvalidEdgeType(weight_type, source_type, target_type, edge_status)
                 
                 # Replace the node
-                self.nodes[node_id].weight = node
+                self._nodes[node_id].weight = node
             else:
                 # Just perfrom the replacement
-                self.nodes[node_id].weight = node
+                self._nodes[node_id].weight = node
         else:
             # insert the node as normal
-            self.nodes[node_id] = NodeMetadata(weight = node)
+            self._nodes[node_id] = NodeMetadata(weight = node)
 
         return node_id
     
@@ -361,23 +369,23 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
             raise InvalidEdgeType(edge_type, source_type, target_type, edge_status)
         
         # Check if the edge needs to be replaced
-        current_edge = self.edges.get(edge_id)
+        current_edge = self._edges.get(edge_id)
         if current_edge is not None:
             # If the node already exist then we just update the weight and endpoints
-            self.edges[edge_id] = EdgeMetadata(weight = edge, source = source, target = target)
+            self._edges[edge_id] = EdgeMetadata(weight = edge, source = source, target = target)
 
             if current_edge.source != source:
-                self.nodes[current_edge.source].outgoing_edges.remove(edge_id)
-                self.nodes[source].outgoing_edges.append(edge_id)
+                self._nodes[current_edge.source].outgoing_edges.remove(edge_id)
+                self._nodes[source].outgoing_edges.append(edge_id)
 
             if current_edge.target != target:
-                self.nodes[current_edge.target].incoming_edges.remove(edge_id)
-                self.nodes[target].incoming_edges.append(edge_id)
+                self._nodes[current_edge.target].incoming_edges.remove(edge_id)
+                self._nodes[target].incoming_edges.append(edge_id)
         else:
             # Create the node as normal
-            self.edges[edge_id] = EdgeMetadata(weight = edge, source = source, target = target)
-            self.nodes[source].outgoing_edges.append(edge_id)
-            self.nodes[target].incoming_edges.append(edge_id)
+            self._edges[edge_id] = EdgeMetadata(weight = edge, source = source, target = target)
+            self._nodes[source].outgoing_edges.append(edge_id)
+            self._nodes[target].incoming_edges.append(edge_id)
 
         return edge_id
 
@@ -388,7 +396,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         This will also remove all its incoming and outgoing edges
         """
         node = self._get_node(node_id)
-        del self.nodes[node_id]
+        del self._nodes[node_id]
 
         edges = chain(node.outgoing_edges, node.incoming_edges)
         for edge_id in edges:
@@ -402,7 +410,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         Remove an edge if it exists
         """
         edge = self._get_edge(edge_id)
-        del self.edges[edge_id]
+        del self._edges[edge_id]
 
         if self.has_node(edge.source):
             source_node = self._get_node(edge.source)
@@ -460,27 +468,27 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         """
         Iterate over all nodes
         """
-        for node in self.nodes.values():
+        for node in self._nodes.values():
             yield node.weight
 
     def get_edges(self) -> Iterator[E]:
         """
         Iterate over all edges
         """
-        for edge in self.edges.values():
+        for edge in self._edges.values():
             yield edge.weight
 
     def get_node_ids(self) -> Iterator[NK]:
         """
         Iterate over all node ids
         """
-        return self.nodes.keys()
+        return self._nodes.keys()
     
     def get_edge_ids(self) -> Iterator[EK]:
         """
         Iterate over all edge ids
         """
-        return self.edges.keys()
+        return self._edges.keys()
 
     @model_serializer(mode='plain')
     def _serialize(self, *args, **kwarg) -> dict[str, Any]:
@@ -497,7 +505,7 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
                     source = edge.source,
                     target = edge.target,
                 ))
-                
+
         kwarg['by_alias'] = True
 
         return TypedGraphCls[N, E, NK, S](
@@ -506,6 +514,18 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
             edges = edges
         ).model_dump(*args, **kwarg)
     
+    @staticmethod
+    def _get_generics(cls):
+        """
+        Retrieve the generics types from the class
+        We use __pydantic_generic_metadata__ as the generics are eaten by the BaseModel
+        """
+        args = cls.__pydantic_generic_metadata__['args']
+        if not isinstance(args, tuple):
+            raise AttributeError(f'Failed to find generics for {cls}')
+        N, E, NK, EK, NT, ET, S = args
+        return N, E, NK, EK, NT, ET, S
+
     # We use staticmethod instead of classmethods
     # because classmethod for some reason does not include the actual type of the generics
     # if a solution is found to this. It would be great, however for now this is what we have
@@ -518,60 +538,97 @@ class TypedGraph(BaseModel, Generic[N, E, NK, EK, NT, ET, S]):
         **kwarg
     ) -> 'TypedGraph[S]':
         """
-        Parse the graph from json
-
-        the cls argument specifies the type of the graph being passed
+        First Parse TypedGraphCls and then use it to construct the TypedGraph
         """
 
-        if len(d) == 1:
-            return default(d)
+        if isinstance(d, cls):
+            return d
 
-        # Check that required fields are present
-        if 'schema' not in d:
-            raise MissingJsonField('schema', 'TypedGraph')
-        if 'nodes' not in d or not isinstance(d['nodes'], list):
-            raise MissingJsonField('nodes', 'TypedGraph')
-        if 'edges' not in d or not isinstance(d['edges'], list):
-            raise MissingJsonField('edges', 'TypedGraph')
+        N, E, NK, EK, NT, ET, S = TypedGraph._get_generics(cls)
 
-        # Retrieve the generics types
-        # this is done by going to each of the fields and figuring out which types they have
-        # This implementation is to put it lightly stupid, however BaseModel eats the generics from Generic so they are nowhere to be seen
-        # this solution is based on https://github.com/pydantic/pydantic/issues/3559
-
-        S = cls.model_fields['graph_schema'].annotation
-
-        nodes = get_args(cls.model_fields['nodes'].annotation)
-        edges = get_args(cls.model_fields['edges'].annotation)
-
-        NK = nodes[0]
-
-        N = nodes[1].model_fields['weight'].annotation
-        E = edges[1].model_fields['weight'].annotation
+        if isinstance(d, dict):
+            if len(d) == 1:
+                return default(d)
+            cls_g = TypedGraphCls[N, E, NK, S].model_validate(d)
+        elif isinstance(d, TypedGraphCls[N, E, NK, S]):
+            cls_g = d
+        else:
+            raise ValueError('expected dict')
         
-        # Parse the schema
-        schema = TypeAdapter(S).validate_python(d['schema'])
-
+        
         # Create the graph
-        g = cls(schema = schema)
-
+        g = cls(schema = cls_g.graph_schema)
+        
         # Add all the nodes
-        for node in d['nodes']:
-            g.add_node(TypeAdapter(N).validate_python(node))
-
+        for node in cls_g.nodes:
+            g.add_node(node)
+        
         # Add all the edges between the nodes
-        for edge in d['edges']:
-            if 'source' not in edge:
-                raise MissingJsonField('source', 'TypedGraph edge')
-            if 'target' not in edge:
-                raise MissingJsonField('target', 'TypedGraph edge')
-            if 'weight' not in edge:
-                raise MissingJsonField('weight', 'TypedGraph edge')
-
+        for edge in cls_g.edges:
             g.add_edge(
-                TypeAdapter(NK).validate_python(edge['source']),
-                TypeAdapter(NK).validate_python(edge['target']),
-                TypeAdapter(E).validate_python(edge['weight']),
+                edge.source,
+                edge.target,
+                edge.weight
             )
-
+        
         return g
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """
+        Use all the properties from TypedGraphCls instead of TypedGraph
+        """
+        # If this breaks i am very sorry
+        # I have spend countless hours trying to come up with a way to serialize/deserialize using TypedGraphCls
+        # but none of them has worked
+        # So now i just hardcode TypedGraphCls schema into TypeGraph
+
+        json_schema = handler(core_schema)
+        json_schema = handler.resolve_ref_schema(json_schema)
+        
+        N, E, NK, EK, NT, ET, S = TypedGraph._get_generics(cls)
+        cls_schema = TypedGraphCls[N, E, NK, S].model_json_schema()
+
+        def find_ref_replacement(ref):
+            if not isinstance(ref, dict):
+                return None
+            
+            if '$ref' in ref:
+                ref_key = ref['$ref'].split('/')[-1]
+                if ref_key in cls_schema['$defs']:
+                    return cls_schema['$defs'][ref_key]
+            return None
+
+        def dereference_refs(d: Any):
+            if isinstance(d, list):
+                for i in range(0, len(d)):
+                    new_ref = find_ref_replacement(d[i])
+                    if new_ref:
+                        d[i] = new_ref
+                        
+                    dereference_refs(d[i])
+            elif isinstance(d, dict):
+                for k, v in list(d.items()):
+                    if k == '$defs':
+                        continue
+                    
+                    new_ref = find_ref_replacement(v)
+                    if new_ref:
+                        d[k] = new_ref
+
+                    dereference_refs(d[k])
+
+        # Since EdgeCls is not used by TypedGraph, any reference to it will cause an error
+        # So instead of figuring out how to add EdgeCls into $defs we just dereference all references
+        dereference_refs(cls_schema)
+
+        json_schema['properties'] = cls_schema['properties']
+        if '$defs' in json_schema:
+            del json_schema['$defs']
+
+        return json_schema
+    
+from pydantic import WithJsonSchema
+from typing import Annotated

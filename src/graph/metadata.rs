@@ -12,7 +12,7 @@ pub(crate) struct EdgeMetadata<E> {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub(crate) struct NodeMetada<N> {
+pub(crate) struct NodeMetadata<N> {
     pub(crate) weight: N,
     /// Look Up Table to help quickly find the incoming edges of a given node.
     /// Notice that the contained information can be produced from `edges`.
@@ -30,20 +30,20 @@ pub(crate) struct NodeMetada<N> {
     pub(crate) outgoing_edges: IndexSet<EdgeKey>,
 }
 
-impl<N> AsRef<N> for NodeMetada<N> {
+impl<N> AsRef<N> for NodeMetadata<N> {
     fn as_ref(&self) -> &N {
         &self.weight
     }
 }
 
-impl<N> Deref for NodeMetada<N> {
+impl<N> Deref for NodeMetadata<N> {
     type Target = N;
     fn deref(&self) -> &Self::Target {
         &self.weight
     }
 }
 
-impl<N> DerefMut for NodeMetada<N> {
+impl<N> DerefMut for NodeMetadata<N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.weight
     }

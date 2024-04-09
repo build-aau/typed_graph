@@ -101,13 +101,13 @@ macro_rules! make_node_struct {
                 }
             }
 
-            impl<NK, EK, S> DowncastMut<NK, EK, $name<EK>, S> for Node<EK>
+            impl<'b, NK, EK, S> DowncastMut<'b, NK, EK, &'b mut $name<EK>, S> for Node<EK>
             where
                 NK: Key,
                 EK: Key,
                 S: SchemaExt<NK, EK, N = Node<EK>>
             {
-                fn downcast_mut(&mut self) -> SchemaResult<&mut $name<EK>, NK, EK, S> {
+                fn downcast_mut<'a: 'b>(&'a mut self) -> SchemaResult<&'b mut $name<EK>, NK, EK, S> {
                     match self {
                         Node::$name(e) => Ok(e),
                         e => Err(TypedError::DownCastFailed(
@@ -118,13 +118,13 @@ macro_rules! make_node_struct {
                 }
             }
 
-            impl<NK, EK, S> Downcast<NK, EK, $name<EK>, S> for Node<EK>
+            impl<'b, NK, EK, S> Downcast<'b, NK, EK, &'b $name<EK>, S> for Node<EK>
             where
                 NK: Key,
                 EK: Key,
                 S: SchemaExt<NK, EK, N = Node<EK>>
             {
-                fn downcast(&self) -> SchemaResult<&$name<EK>, NK, EK, S> {
+                fn downcast<'a: 'b>(&'a self) -> SchemaResult<&'b $name<EK>, NK, EK, S> {
                     match self {
                         Node::$name(e) => Ok(e),
                         e => Err(TypedError::DownCastFailed(
@@ -269,13 +269,13 @@ macro_rules! make_edge_struct {
                 }
             }
 
-            impl<NK, EK, S> DowncastMut<NK, EK, $name<EK>, S> for Edge<EK>
+            impl<'b, NK, EK, S> DowncastMut<'b, NK, EK, &'b mut $name<EK>, S> for Edge<EK>
             where
                 NK: Key,
                 EK: Key,
                 S: SchemaExt<NK, EK, E = Edge<EK>>
             {
-                fn downcast_mut(&mut self) -> SchemaResult<&mut $name<EK>, NK, EK, S> {
+                fn downcast_mut<'a: 'b>(&'a mut self) -> SchemaResult<&'b mut $name<EK>, NK, EK, S> {
                     match self {
                         Edge::$name(e) => Ok(e),
                         e => Err(TypedError::DownCastFailed(
@@ -286,13 +286,13 @@ macro_rules! make_edge_struct {
                 }
             }
 
-            impl<NK, EK, S> Downcast<NK, EK, $name<EK>, S> for Edge<EK>
+            impl<'b, NK, EK, S> Downcast<'b, NK, EK, &'b $name<EK>, S> for Edge<EK>
             where
                 NK: Key,
                 EK: Key,
                 S: SchemaExt<NK, EK, E = Edge<EK>>
             {
-                fn downcast(&self) -> SchemaResult<&$name<EK>, NK, EK, S> {
+                fn downcast<'a: 'b>(&'a self) -> SchemaResult<&'b $name<EK>, NK, EK, S> {
                     match self {
                         Edge::$name(e) => Ok(e),
                         e => Err(TypedError::DownCastFailed(
@@ -399,7 +399,8 @@ impl<NK: Key, EK: Key> SchemaExt<NK, EK> for Schema {
 
     fn allow_edge(
         &self,
-        _new_edge_count: usize,
+        _outgoing_edge_count: usize, 
+        _incoming_edge_count: usize, 
         edge_ty: EdgeType,
         source: NodeType,
         target: NodeType,
@@ -455,7 +456,7 @@ fn main() -> SchemaResult<(), usize, usize, Schema> {
     println!("C name = {}", c.name);
 
     // This will fail if we try to cast it to the wrong type
-    let e = g.get_node_downcast::<B<_>>(a_id);
+    let e = g.get_node_downcast::<&B<_>>(a_id);
     assert!(e.is_err());
 
     // But it makes it significantly easier to retrieve a specific type
@@ -474,16 +475,16 @@ fn main() -> SchemaResult<(), usize, usize, Schema> {
     /// Since we have defined the schema we also know which type of node will be encountered
     ///
     /// For larer projects, these might be defined per node/edge
-    fn get_connected_node<'a, E>(
+    fn get_connected_node<'a, E: 'a>(
         node: &'a Node<usize>,
         g: &'a TypedGraph<usize, usize, Schema>,
     ) -> SchemaResult<impl Iterator<Item = (&'a E, &'a Node<usize>)>, usize, usize, Schema>
     where
-        <Schema as SchemaExt<usize, usize>>::E: Downcast<usize, usize, E, Schema>,
+        <Schema as SchemaExt<usize, usize>>::E: Downcast<'a, usize, usize, &'a E, Schema>,
     {
-        Ok(g.get_outgoing(node.get_id())?.map(|e| {
+        Ok(g.get_outgoing(node.get_id())?.map(|e: typed_graph::EdgeRef<'a, usize, usize, Schema>| {
             (
-                e.get_weight_downcast::<E>().unwrap(),
+                e.get_weight_downcast().unwrap(),
                 g.get_node(e.get_target()).unwrap(),
             )
         }))

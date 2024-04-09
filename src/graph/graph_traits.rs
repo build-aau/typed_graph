@@ -1,7 +1,9 @@
+use std::any::type_name;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use either::Either;
 
-use crate::SchemaResult;
+use crate::{SchemaError, SchemaResult};
 
 /// Trait shared by all nodes in a graph
 pub trait NodeExt<NK: Key>: Typed + Id<NK> + Clone + Debug {}
@@ -32,7 +34,8 @@ where
     /// If the quantity limit is reached return Err(TomMny)
     fn allow_edge(
         &self,
-        new_edge_count: usize,
+        outgoing_edge_count: usize, 
+        incoming_edge_count: usize, 
         edge_ty: <Self::E as Typed>::Type,
         source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
@@ -46,7 +49,8 @@ pub enum DisAllowedNode {
 
 #[derive(Debug)]
 pub enum DisAllowedEdge {
-    ToMany,
+    ToManyOutgoing,
+    ToManyIncoming,
     InvalidType,
 }
 
@@ -94,26 +98,84 @@ pub trait Typed: PartialEq<Self::Type> {
     fn get_type(&self) -> Self::Type;
 }
 
-pub trait Downcast<'a, NK, EK, T, S>
+pub trait Downcast<'b, NK, EK, T, S>
 where
     NK: Key,
     EK: Key,
+    T: 'b,
     S: SchemaExt<NK, EK>,
 {
     /// Cast a node or edge into a more specific type
     ///
     /// The call will fail if the requested type is not a suptype of the current one
-    fn downcast(&'a self) -> SchemaResult<T, NK, EK, S>;
+    fn downcast<'a: 'b>(&'a self) -> SchemaResult<T, NK, EK, S>;
 }
 
-pub trait DowncastMut<'a, NK, EK, T, S>
+pub trait DowncastMut<'b, NK, EK, T, S>
 where
     NK: Key,
     EK: Key,
+    T: 'b,
     S: SchemaExt<NK, EK>,
 {
     /// Cast a node or edge into a more specific type
     ///
     /// The call will fail if the requested type is not a suptype of the current one
-    fn downcast_mut(&'a mut self) -> SchemaResult<T, NK, EK, S>;
+    fn downcast_mut<'a: 'b>(&'a mut self) -> SchemaResult<T, NK, EK, S>;
 }
+
+impl<'a, O1, O2, NK, EK, S, T> Downcast<'a, NK, EK, Either<&'a O1, &'a O2>, S> for T
+    where
+        T: Downcast<'a, NK, EK, &'a O1, S> + Downcast<'a, NK, EK, &'a O2, S> + Typed,
+        O1: Typed,
+        O2: Typed,
+        NK: Key,
+        EK: Key,
+        S: SchemaExt<NK, EK>
+{
+    fn downcast<'b: 'a>(&'a self) -> SchemaResult<Either<&'a O1, &'a O2>, NK, EK, S> {
+        let n1 = Downcast::<'a, NK, EK, &'a O1, S>::downcast(self);
+
+        if let Ok(n1) = n1 {
+            return Ok(Either::Left(n1));
+        }
+
+        let n2 = Downcast::<'a, NK, EK, &'a O2, S>::downcast(self);
+
+        if let Ok(n2) = n2 {
+            return Ok(Either::Right(n2));
+        }
+
+        Err(SchemaError::<NK, EK, S>::DownCastFailed(format!("{:?} or {:?}", type_name::<O1>(), type_name::<O2>()), self.get_type().to_string()))
+    }
+}
+
+/*impl<'a, O1, O2, NK, EK, S, T> DowncastMut<'a, NK, EK, Either<&'a mut O1, &'a mut O2>, S> for T
+    where
+        T: DowncastMut<'a, NK, EK, &'a mut O1, S> + DowncastMut<'a, NK, EK, &'a mut O2, S> + Typed,
+        O1: Typed,
+        O2: Typed,
+        NK: Key,
+        EK: Key,
+        S: SchemaExt<NK, EK>
+{
+    fn downcast_mut<'b: 'a>(&'a mut self) -> SchemaResult<Either<&'a mut O1, &'a mut O2>, NK, EK, S> {
+        let n1 = DowncastMut::<'a, NK, EK, &'a mut O1, S>::downcast_mut(self);
+
+        if let Ok(n1) = n1 {
+            return Ok(Either::Left(n1));
+        }
+
+        drop(n1);
+
+        let n2 = DowncastMut::<'a, NK, EK, &'a mut O2, S>::downcast_mut(self);
+
+        if let Ok(n2) = n2 {
+            return Ok(Either::Right(n2));
+        }
+
+        drop(n2);
+
+        Err(SchemaError::<NK, EK, S>::DownCastFailed(format!("{:?} or {:?}", type_name::<O1>(), type_name::<O2>()), self.get_type().to_string()))
+    }
+}*/

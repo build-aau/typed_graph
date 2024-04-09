@@ -36,7 +36,8 @@ pub struct GenericSchema<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> {
     edge_blacklist: Option<Vec<ET>>,
     endpoint_whitelist: Option<Vec<(NT, NT, ET)>>,
     endpoint_blacklist: Option<Vec<(NT, NT, ET)>>,
-    endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>,
+    endpoint_outgoing_max_quantity: Option<HashMap<(NT, ET), usize>>,
+    endpoint_incoming_max_quantity: Option<HashMap<(NT, ET), usize>>,
 }
 
 impl<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericSchema<NT, ET> {
@@ -87,11 +88,19 @@ impl<NT: GenericTypeIdentifier, ET: GenericTypeIdentifier> GenericSchema<NT, ET>
         self
     }
 
-    pub fn endpoint_max_quantity(
+    pub fn endpoint_outgoing_max_quantity(
         mut self,
-        endpoint_max_quantity: Option<HashMap<(NT, NT, ET), usize>>,
+        endpoint_max_quantity: Option<HashMap<(NT, ET), usize>>,
     ) -> Self {
-        self.endpoint_max_quantity = endpoint_max_quantity;
+        self.endpoint_outgoing_max_quantity = endpoint_max_quantity;
+        self
+    }
+
+    pub fn endpoint_incoming_max_quantity(
+        mut self,
+        endpoint_max_quantity: Option<HashMap<(NT, ET), usize>>,
+    ) -> Self {
+        self.endpoint_incoming_max_quantity = endpoint_max_quantity;
         self
     }
 }
@@ -112,7 +121,8 @@ where
 
     fn allow_edge(
         &self,
-        new_edge_count: usize,
+        outgoing_edge_count: usize, 
+        incoming_edge_count: usize, 
         edge_ty: <Self::E as Typed>::Type,
         source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,
@@ -145,14 +155,22 @@ where
             return Err(DisAllowedEdge::InvalidType);
         }
 
-        let is_endpoint_quantity = self.endpoint_max_quantity.as_ref().map_or(true, |l| {
-            l.get(&endpoint)
-                .map_or(true, |quantity| new_edge_count <= *quantity)
+        let is_outgoing_endpoint_quantity = self.endpoint_outgoing_max_quantity.as_ref().map_or(true, |l| {
+            l.get(&(source, edge_ty.clone()))
+                .map_or(true, |quantity| outgoing_edge_count <= *quantity)
         });
-        let is_allowed_quantity = is_endpoint_quantity;
 
-        if !is_allowed_quantity {
-            return Err(DisAllowedEdge::ToMany);
+        let is_incoming_endpoint_quantity = self.endpoint_incoming_max_quantity.as_ref().map_or(true, |l| {
+            l.get(&(target, edge_ty))
+                .map_or(true, |quantity| incoming_edge_count <= *quantity)
+        });
+
+        if !is_outgoing_endpoint_quantity {
+            return Err(DisAllowedEdge::ToManyOutgoing);
+        }
+
+        if !is_incoming_endpoint_quantity {
+            return Err(DisAllowedEdge::ToManyIncoming);
         }
 
         Ok(())

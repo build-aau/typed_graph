@@ -174,7 +174,8 @@ impl SchemaExt<WeightId, WeightId> for JsonSchema {
     /// DisAllowedEdge::ToMany if the count exceeds a specified amount
     fn allow_edge(
         &self,
-        _new_edge_count: usize,
+        _outgoing_edge_count: usize, 
+        _incoming_edge_count: usize, 
         edge_ty: <Self::E as Typed>::Type,
         source: <Self::N as Typed>::Type,
         target: <Self::N as Typed>::Type,

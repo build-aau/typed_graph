@@ -75,9 +75,9 @@ impl Dummy<Faker> for TestProject {
         for edge_type in 0..rng.gen_range(5..10) {
             for _ in 0..rng.gen_range(0..max_edge_len) {
                 edge_whitelist.insert((
+                    *node_whitelist.choose(rng).unwrap(),
+                    *node_whitelist.choose(rng).unwrap(),
                     edge_type,
-                    *node_whitelist.choose(rng).unwrap(),
-                    *node_whitelist.choose(rng).unwrap(),
                 ));
             }
         }
@@ -117,11 +117,11 @@ impl Dummy<Faker> for TestProject {
 
                 let possible_edge_types: HashSet<&(usize, usize, usize)> = edge_whitelist
                     .iter()
-                    .filter(|(_, source, target)| {
+                    .filter(|(source, target, _)| {
                         current_node_types.contains(source) && current_node_types.contains(target)
                     })
                     .collect();
-                if let Some((edge_type, source, target)) = possible_edge_types.iter().choose(rng) {
+                if let Some((source, target, edge_type)) = possible_edge_types.iter().choose(rng) {
                     let source_id = g
                         .nodes()
                         .filter(|n| &n.1 == source)

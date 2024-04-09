@@ -38,7 +38,7 @@ where
     /// Contains the node weights and adjecency list
     ///
     /// Since the nodes stores its own id this can be used to convert node keys to node ids
-    nodes: HopSlotMap<NodeKey, NodeMetada<S::N>>,
+    nodes: HopSlotMap<NodeKey, NodeMetadata<S::N>>,
     /// Contains the edge weights, and edge endpoints
     ///
     /// Since the edges stores its own id this can be used to convert edge keys to edge ids
@@ -89,7 +89,7 @@ where
             .ok_or_else(|| TypedError::MissingEdge(edge_id))
     }
 
-    fn get_node_internal(&self, node_key: NodeKey) -> SchemaResult<&NodeMetada<S::N>, NK, EK, S> {
+    fn get_node_internal(&self, node_key: NodeKey) -> SchemaResult<&NodeMetadata<S::N>, NK, EK, S> {
         self.nodes
             .get(node_key)
             .ok_or_else(|| TypedError::MissingNodeKey(node_key))
@@ -104,7 +104,7 @@ where
     fn get_node_mut_internal(
         &mut self,
         node_key: NodeKey,
-    ) -> SchemaResult<&mut NodeMetada<S::N>, NK, EK, S> {
+    ) -> SchemaResult<&mut NodeMetadata<S::N>, NK, EK, S> {
         self.nodes
             .get_mut(node_key)
             .ok_or_else(|| TypedError::MissingNodeKey(node_key))
@@ -117,14 +117,6 @@ where
         self.edges
             .get_mut(edge_key)
             .ok_or_else(|| TypedError::MissingEdgeKey(edge_key))
-    }
-
-    pub fn get_nodes(&self) -> impl Iterator<Item = NK> + '_ {
-        self.nodes.values().into_iter().map(|n| n.get_id())
-    }
-
-    pub fn get_edges(&self) -> impl Iterator<Item = EK> + '_ {
-        self.edges.values().into_iter().map(|e| e.get_id())
     }
 
     pub fn get_node_safe(&self, node_id: NK) -> Option<&S::N> {
@@ -180,30 +172,30 @@ where
             .ok_or_else(|| TypedError::MissingEdge(edge_id))
     }
 
-    pub fn get_node_downcast<'a, N>(&'a self, node_id: NK) -> SchemaResult<N, NK, EK, S>
+    pub fn get_node_downcast<'a: 'b, 'b, N: 'b>(&'a self, node_id: NK) -> SchemaResult<N, NK, EK, S>
     where
-        S::N: Downcast<'a, NK, EK, N, S>,
+        S::N: Downcast<'b, NK, EK, N, S>,
     {
         self.get_node(node_id).and_then(|n| n.downcast())
     }
 
-    pub fn get_node_downcast_mut<'a, N>(&'a mut self, node_id: NK) -> SchemaResult<N, NK, EK, S>
+    pub fn get_node_downcast_mut<'a: 'b, 'b, N: 'b>(&'a mut self, node_id: NK) -> SchemaResult<N, NK, EK, S>
     where
-        S::N: DowncastMut<'a, NK, EK, N, S>,
+        S::N: DowncastMut<'b, NK, EK, N, S>,
     {
         self.get_node_mut(node_id).and_then(|n| n.downcast_mut())
     }
 
-    pub fn get_edge_downcast<'a, E>(&'a self, edge_id: EK) -> SchemaResult<E, NK, EK, S>
+    pub fn get_edge_downcast<'a: 'b, 'b, E: 'b>(&'a self, edge_id: EK) -> SchemaResult<E, NK, EK, S>
     where
-        S::E: Downcast<'a, NK, EK, E, S>,
+        S::E: Downcast<'b, NK, EK, E, S>,
     {
         self.get_edge(edge_id).and_then(|e| e.downcast())
     }
 
-    pub fn get_edge_downcast_mut<'a, E>(&'a mut self, edge_id: EK) -> SchemaResult<E, NK, EK, S>
+    pub fn get_edge_downcast_mut<'a: 'b, 'b, E: 'b>(&'a mut self, edge_id: EK) -> SchemaResult<E, NK, EK, S>
     where
-        S::E: DowncastMut<'a, NK, EK, E, S>,
+        S::E: DowncastMut<'b, NK, EK, E, S>,
     {
         self.get_edge_mut(edge_id).and_then(|e| e.downcast_mut())
     }
@@ -330,27 +322,23 @@ where
                         self.get_node_internal(edge.target)?
                     };
 
-                    // Count the number of other edges going in the same direction
-                    let mut quantity = 0;
-                    let outgoing = self.get_outgoing(source_node.get_id())?;
-                    for out_edge in outgoing {
-                        // Only look at edge with the same type as the focused one
-                        if out_edge.weight.get_type() != weight_type {
-                            continue;
-                        }
-
-                        // Only look at edges going to nodes of the same type
-                        let out_target_node = self.get_node(out_edge.target)?;
-                        if out_target_node.get_type() != target_node.get_type() {
-                            continue;
-                        }
-
-                        quantity += 1;
-                    }
+                    let outgoing_quantity = self.count_quantity(
+                        source_node.get_id(), 
+                        Direction::Outgoing, 
+                        target_node.get_type(), 
+                        weight_type.clone()
+                    )?;
+                    let incoming_quantity = self.count_quantity(
+                        target_node.get_id(), 
+                        Direction::Incoming, 
+                        source_node.get_type(), 
+                        weight_type.clone()
+                    )?;
 
                     let allowed = self.schema.allow_edge(
                         // Account for the new type adding a new edge
-                        quantity + 1,
+                        outgoing_quantity + 1,
+                        incoming_quantity + 1,
                         weight_type.clone(),
                         source_node.get_type(),
                         target_node.get_type(),
@@ -375,7 +363,7 @@ where
             }
         } else {
             // Add the node to the graph
-            let node_key = self.nodes.insert(NodeMetada {
+            let node_key = self.nodes.insert(NodeMetadata {
                 weight: weight,
                 outgoing_edges: Default::default(),
                 incoming_edges: Default::default(),
@@ -384,6 +372,30 @@ where
         }
 
         Ok(node_id)
+    }
+
+    fn count_quantity(&self, node_id: NK, dir: Direction, node_type: <S::N as Typed>::Type, edge_type: <S::E as Typed>::Type) -> SchemaResult<usize, NK, EK, S> {
+        let mut quantity = 0;
+        let edges: Vec<_> = match dir {
+            Direction::Outgoing => self.get_outgoing(node_id)?.collect(),
+            Direction::Incoming => self.get_incoming(node_id)?.collect(),
+        };
+        for edge in edges {
+            // Only look at edges of the same type
+            if edge.get_type() != edge_type {
+                continue;
+            }
+
+            // Only look at edges going to nodes of the same type
+            let out_target_node = self.get_node(edge.get_outer())?;
+            if out_target_node.get_type() != node_type {
+                continue;
+            }
+
+            quantity += 1;
+        }
+
+        Ok(quantity)
     }
 
     /// Add an edge and if it already exists update the weight and enpoints of the edge
@@ -402,25 +414,22 @@ where
         let source_node = self.get_node_internal(source_key)?;
         let target_node = self.get_node_internal(target_key)?;
 
-        let mut quantity = 0;
-        let edges = self.get_outgoing(source_node.get_id())?;
-        for edge in edges {
-            // Only look at edges of the same type
-            if edge.get_type() != weight.get_type() {
-                continue;
-            }
-
-            // Only look at edges going to nodes of the same type
-            let out_target_node = self.get_node(edge.target)?;
-            if out_target_node.get_type() != target_node.get_type() {
-                continue;
-            }
-
-            quantity += 1;
-        }
+        let outgoing_quantity = self.count_quantity(
+            source_node.get_id(), 
+            Direction::Outgoing, 
+            target_node.get_type(), 
+            weight.get_type())
+            ?;
+        let incoming_quantity = self.count_quantity(
+            target_node.get_id(), 
+            Direction::Incoming, 
+            source_node.get_type(), 
+            weight.get_type()
+        )?;
 
         let allowed = self.schema.allow_edge(
-            quantity + 1,
+            outgoing_quantity + 1,
+            incoming_quantity + 1,
             weight_type.clone(),
             source_node.get_type(),
             target_node.get_type(),
@@ -460,11 +469,11 @@ where
                 let old_target_key = self.get_node_key(old_target)?;
                 self.get_node_mut_internal(old_target_key)?
                     .incoming_edges
-                    .remove(&edge_key);
+                    .swap_remove(&edge_key);
 
                 self.get_node_mut_internal(target_key)?
                     .incoming_edges
-                    .remove(&edge_key);
+                    .swap_remove(&edge_key);
             }
         } else {
             // Insert the edge
@@ -507,7 +516,7 @@ where
             if edge.target != node_key {
                 self.get_node_mut_internal(edge.target)?
                     .incoming_edges
-                    .remove(&edge_key);
+                    .swap_remove(&edge_key);
             }
         }
 
@@ -550,7 +559,7 @@ where
             .shift_remove(&edge_key);
         self.get_node_mut_internal(edge.target)?
             .incoming_edges
-            .remove(&edge_key);
+            .swap_remove(&edge_key);
 
         Ok(edge.weight)
     }
@@ -650,11 +659,11 @@ where
             .filter(move |e| filter(&e.weight)))
     }
 
-    pub fn nodes<'a>(&'a self) -> impl Iterator<Item = &S::N> + 'a {
+    pub fn nodes(&self) -> impl Iterator<Item = &S::N> + '_ {
         self.nodes.values().map(Deref::deref)
     }
 
-    pub fn edges<'a>(&'a self) -> impl Iterator<Item = &S::E> + 'a {
+    pub fn edges(&self) -> impl Iterator<Item = &S::E> + '_ {
         self.edges.values().map(Deref::deref)
     }
 
@@ -667,12 +676,20 @@ where
         })
     }
 
-    pub fn node_ids<'a>(&'a self) -> impl Iterator<Item = NK> + 'a {
-        self.nodes.values().map(Deref::deref).map(Id::get_id)
+    pub fn nodes_downcast<'a, T: 'a>(&'a self) -> impl Iterator<Item = T> + 'a where S::N: Downcast<'a, NK, EK, T, S> {
+        self.nodes.values().map(Deref::deref).filter_map(|f| f.downcast().ok())
     }
 
-    pub fn edge_ids<'a>(&'a self) -> impl Iterator<Item = EK> + 'a {
-        self.edges.values().map(Deref::deref).map(Id::get_id)
+    pub fn edges_downcast<'a, T: 'a>(&'a self) -> impl Iterator<Item = T> + 'a where S::E: Downcast<'a, NK, EK, T, S> {
+        self.edges.values().map(Deref::deref).filter_map(|f| f.downcast().ok())
+    }
+
+    pub fn node_ids(&self) -> impl Iterator<Item = NK> + '_ {
+        self.nodes.values().map(|n| n.get_id())
+    }
+
+    pub fn edge_ids(&self) -> impl Iterator<Item = EK> + '_ {
+        self.edges.values().map(|e| e.get_id())
     }
 
     /// Apply a Migration to the current graph
@@ -773,8 +790,9 @@ where
 
                     match e {
                         // Any excess edges are removed
-                        // Since egdes are updated in outgoing order this will remove the last edges in the outgoing order
-                        Err(TypedError::InvalidEdgeType(_, _, _, DisAllowedEdge::ToMany)) => (),
+                        // Since edges are updated in outgoing order this will remove the last edges in the outgoing order
+                        Err(TypedError::InvalidEdgeType(_, _, _, DisAllowedEdge::ToManyOutgoing))
+                        | Err(TypedError::InvalidEdgeType(_, _, _, DisAllowedEdge::ToManyIncoming)) => (),
                         Err(e) => Err(e)?,
                         Ok(_) => (),
                     }
@@ -986,7 +1004,7 @@ fn graph_compose_test() -> crate::test::TestResult<()> {
 }
 
 #[test]
-fn graph_quantity_test() -> crate::test::TestResult<()> {
+fn graph_quantity_test_outgoing() -> crate::test::TestResult<()> {
     use crate::test::*;
 
     const NODE_TYPE: usize = 0;
@@ -995,14 +1013,23 @@ fn graph_quantity_test() -> crate::test::TestResult<()> {
     const EDGE_TYPE1: usize = 0;
     const EDGE_TYPE2: usize = 2;
 
-    let s = TestSchema::new().endpoint_max_quantity(Some(
-        vec![
-            // Set a max capacity of 2 edges of type EDGE_TYPE1 from NODE_TYPE to NODE_TYPE1
-            ((EDGE_TYPE1, NODE_TYPE, NODE_TYPE1), 2),
-        ]
-        .into_iter()
-        .collect(),
-    ));
+    let s = TestSchema::new()
+        .endpoint_outgoing_max_quantity(Some(
+            vec![
+                // Set a max capacity of 2 edges of type EDGE_TYPE1 from NODE_TYPE to NODE_TYPE1
+                ((NODE_TYPE, EDGE_TYPE1), 2),
+            ]
+            .into_iter()
+            .collect(),
+        ))
+        .endpoint_incoming_max_quantity(Some(
+            vec![
+                // Set a max capacity of 2 edges of type EDGE_TYPE1 from NODE_TYPE to NODE_TYPE1
+                ((NODE_TYPE2, EDGE_TYPE1), 3),
+            ]
+            .into_iter()
+            .collect(),
+        ));
     let mut g = TestGraph::new(s);
 
     let source_id = g.add_node((0, NODE_TYPE))?;
@@ -1013,6 +1040,74 @@ fn graph_quantity_test() -> crate::test::TestResult<()> {
     // Second outgoing edge
     g.add_edge(source_id, target_id, (1, EDGE_TYPE1))?;
     // Third outgoing edge
+    let e = g.add_edge(source_id, target_id, (2, EDGE_TYPE1));
+    assert!(e.is_err(), "Added third edge");
+
+    // Try to add third edge by updating an existing edge of another type
+    g.add_edge(source_id, target_id, (2, EDGE_TYPE2))?;
+
+    let e = g.add_edge(source_id, target_id, (2, EDGE_TYPE1));
+    assert!(e.is_err(), "Updating edge");
+    g.remove_edge(2)?;
+
+    // Try to add third edge by updating an existing edge of another type going in the opposit direction
+    g.add_edge(target_id, source_id, (2, EDGE_TYPE2))?;
+
+    let e = g.add_edge(source_id, target_id, (2, EDGE_TYPE1));
+    assert!(e.is_err(), "Updating edge reversed");
+    g.remove_edge(2)?;
+
+    // Try to add third edge by updating an existing edge of another type coming from different nodes
+    let source_id2 = g.add_node((2, NODE_TYPE2))?;
+    let target_id2 = g.add_node((3, NODE_TYPE2))?;
+    g.add_edge(target_id2, source_id2, (2, EDGE_TYPE2))?;
+
+    let e = g.add_edge(source_id, target_id, (2, EDGE_TYPE1));
+    assert!(e.is_err(), "Updating completly different edge");
+    g.remove_edge(2)?;
+
+    // Make sure the limit only works in one direction
+    // First incoming edge
+    g.add_edge(target_id, source_id, (10, EDGE_TYPE1))?;
+    // Second incoming edge
+    g.add_edge(target_id, source_id, (11, EDGE_TYPE1))?;
+    // Third incoming edge
+    g.add_edge(target_id, source_id, (12, EDGE_TYPE1))?;
+    // Fourth incoming edge
+    g.add_edge(target_id, source_id, (12, EDGE_TYPE1))?;
+
+    Ok(())
+}
+
+#[test]
+fn graph_quantity_test_incoming() -> crate::test::TestResult<()> {
+    use crate::test::*;
+
+    const NODE_TYPE: usize = 0;
+    const NODE_TYPE1: usize = 1;
+    const NODE_TYPE2: usize = 2;
+    const EDGE_TYPE1: usize = 0;
+    const EDGE_TYPE2: usize = 2;
+
+    let s = TestSchema::new()
+        .endpoint_incoming_max_quantity(Some(
+            vec![
+                // Set a max capacity of 2 edges of type EDGE_TYPE1 from NODE_TYPE to NODE_TYPE1
+                ((NODE_TYPE, EDGE_TYPE1), 2),
+            ]
+            .into_iter()
+            .collect(),
+        ));
+    let mut g = TestGraph::new(s);
+
+    let source_id = g.add_node((0, NODE_TYPE1))?;
+    let target_id = g.add_node((1, NODE_TYPE))?;
+
+    // First incoming edge
+    g.add_edge(source_id, target_id, (0, EDGE_TYPE1))?;
+    // Second incoming edge
+    g.add_edge(source_id, target_id, (1, EDGE_TYPE1))?;
+    // Third incoming edge
     let e = g.add_edge(source_id, target_id, (2, EDGE_TYPE1));
     assert!(e.is_err(), "Added third edge");
 

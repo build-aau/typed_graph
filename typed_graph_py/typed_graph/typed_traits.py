@@ -58,7 +58,8 @@ class TypeStatus(IntEnum):
     """Indicator for whether or not the given type is allowed in the graf"""
     InvalidType = 0
     Ok = 1
-    ToMany = 2
+    ToManyOutgoing = 2
+    ToManyIncoming = 3
 
     @staticmethod
     def is_allowed(status: 'TypeStatus') -> bool:
@@ -69,8 +70,10 @@ class TypeStatus(IntEnum):
             return 'InvalidType'
         elif self == TypeStatus.Ok:
             return 'Ok'
-        elif self == TypeStatus.ToMany:
-            return 'ToMany'
+        elif self == TypeStatus.ToManyOutgoing:
+            return 'ToManyOutgoing'
+        elif self == TypeStatus.ToManyIncoming:
+            return 'ToManyIncoming'
         return 'Unknown TypeStatus'
 
 N = TypeVar('N')
@@ -95,7 +98,7 @@ class SchemaExt(RustModel, Generic[N, E, NK, EK, NT, ET]):
         pass
 
     @abstractmethod
-    def allow_edge(self, quantity: int, edge_type: ET, source_type: NT, target_type: NT) -> TypeStatus:
+    def allow_edge(self, outgoing_quantity: int, incoming_quantity: int, edge_type: ET, source_type: NT, target_type: NT) -> TypeStatus:
         pass
 
 S = TypeVar('S')
